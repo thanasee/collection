@@ -16,8 +16,6 @@
 
 #include "symbol.inc"
 
-
-
 #define sol_io IF(IU0>=0) WRITE(IU0,*)
 
 #define debugsol
@@ -35,17 +33,13 @@
 #define ifdsol !
 #endif
 
+#ifdef __INTEL_COMPILER
 #define ABORT      CALL TRACEBACKQQ; CALL M_exit(); CALL ABORT
+#else
+#define ABORT      CALL M_exit(); CALL ABORT
+#endif
 
 #define dsol_io ifdsol sol_io
-
-
-
-
-
-
-
-
 
 MODULE solvation_grid
 
@@ -56,7 +50,9 @@ MODULE solvation_grid
  USE poscar,  ONLY : type_info
  USE lattice, ONLY : latt
  USE mgrid,   ONLY : grid_3d
+#ifdef __INTEL_COMPILER
  USE IFCORE
+#endif
 
  IMPLICIT NONE
  
@@ -96,8 +92,7 @@ MODULE solvation_grid
    PROCEDURE LAPL_inpl, LAPL1, LAPL3
  END INTERFACE
    
- 
- 
+
 CONTAINS
 
 !>=======================SUBROUTINE INIT_SOL_GRID===========
@@ -1053,17 +1048,7 @@ SUBROUTINE WRITE_TO_FILE_RL(FNAME, A)
 
 END SUBROUTINE WRITE_TO_FILE_RL
 
-
-
-
 END MODULE solvation_grid
-
-
-
-
-
-
-
 
 
 MODULE solvation_lpcm
@@ -1072,7 +1057,9 @@ MODULE solvation_lpcm
  USE base
  USE constant 
  USE mpimy 
+#ifdef __INTEL_COMPILER
  USE IFCORE
+#endif
  USE solvation_grid
  
  IMPLICIT NONE
@@ -1503,20 +1490,15 @@ END SUBROUTINE SET_SOL_WRITE_LPCM
 END MODULE solvation_lpcm
 
 
-
-
-
-
-
-
-
 MODULE solvation_nlpcm
  
  USE prec
  USE base
  USE constant 
  USE mpimy 
+#ifdef __INTEL_COMPILER
  USE IFCORE
+#endif
  USE solvation_grid
  
  IMPLICIT NONE
@@ -3116,13 +3098,6 @@ END SUBROUTINE SET_SOL_WRITE_NLPCM
 END MODULE solvation_nlpcm
 
 
-
-
-
-
-
-
-
 !>==========================MODULE solvation===============================
 !!
 !! This module glues together the solvation engine module POT_LPCM_K
@@ -3727,23 +3702,4 @@ SUBROUTINE SET_SOL_WRITE
 
 END SUBROUTINE SET_SOL_WRITE
 
-
-
-
-
 END MODULE solvation
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
