@@ -227,14 +227,8 @@ def check_elements(elements):
         return None
 
 
-def mapping_elements(elements,
-                     atom_counts,
-                     positions_cartesian,
-                     positions_direct,
-                     species,
-                     selective_dynamics,
-                     flags,
-                     sort_elements=None):
+def mapping_elements(elements, atom_counts, positions_cartesian, positions_direct,
+                     species, selective_dynamics, flags, sort_elements=None):
     """Re-order atoms so that each element block is contiguous and sorted canonically.
 
     Groups atomic positions by element symbol, resolves any duplicate element
@@ -348,14 +342,8 @@ def define_labels(elements, atom_counts):
     return labels
 
 
-def write_POSCAR(filepath,
-                 lattice_matrix,
-                 elements,
-                 atom_counts,
-                 selective_dynamics,
-                 positions_direct,
-                 flags,
-                 labels):
+def write_POSCAR(filepath, lattice_matrix, elements, atom_counts,
+                 selective_dynamics, positions_direct, flags, labels):
     """Write a VASP5-format POSCAR file with Direct coordinates.
 
     The scale factor is always written as 1.0 because the lattice vectors
@@ -877,27 +865,17 @@ def mode_pre(filepath):
     print(f"\nDetected crystal system: {crystal_system}")
     print(f"Strain types to compute: {strain_types}\n")
 
-    mapping = mapping_elements(poscar["elements"],
-                               poscar["atom_counts"],
-                               poscar["positions_cartesian"],
-                               poscar["positions_direct"],
-                               poscar["species"],
-                               poscar["selective_dynamics"],
+    mapping = mapping_elements(poscar["elements"], poscar["atom_counts"], poscar["positions_cartesian"],
+                               poscar["positions_direct"], poscar["species"], poscar["selective_dynamics"],
                                poscar["flags"])
-    labels = define_labels(mapping["elements"],
-                           mapping["atom_counts"])
+    labels = define_labels(mapping["elements"], mapping["atom_counts"])
 
     # Write unstrained reference structure
     unstrain_path = 'unstrain'
     os.makedirs(unstrain_path, exist_ok=True)
-    write_POSCAR(os.path.join(unstrain_path, 'POSCAR'),
-                 poscar["lattice_matrix"],
-                 mapping["elements"],
-                 mapping["atom_counts"],
-                 poscar["selective_dynamics"],
-                 mapping["positions_direct"],
-                 mapping["flags"],
-                 labels)
+    write_POSCAR(os.path.join(unstrain_path, 'POSCAR'), poscar["lattice_matrix"], mapping["elements"],
+                 mapping["atom_counts"], poscar["selective_dynamics"], mapping["positions_direct"],
+                 mapping["flags"], labels)
 
     # Write strained structures
     for strain_type in strain_types:
@@ -907,14 +885,9 @@ def mode_pre(filepath):
             strain_matrix = build_strain_matrix(strain_type, strain)
             new_lattice_matrix = applying_strain(poscar["lattice_matrix"],
                                                  strain_matrix)
-            write_POSCAR(os.path.join(strain_path, 'POSCAR'),
-                         new_lattice_matrix,
-                         mapping["elements"],
-                         mapping["atom_counts"],
-                         poscar["selective_dynamics"],
-                         mapping["positions_direct"],
-                         mapping["flags"],
-                         labels)
+            write_POSCAR(os.path.join(strain_path, 'POSCAR'), new_lattice_matrix, mapping["elements"],
+                         mapping["atom_counts"], poscar["selective_dynamics"], mapping["positions_direct"],
+                         mapping["flags"], labels)
 
     print(f"Done. Strained POSCARs written for {len(strain_types)} strain types "
           f"× {len(STRAIN_RANGE)} strain values.\n")
@@ -955,10 +928,7 @@ def mode_post():
     write_elastic_tensor(elastic_tensor)
 
     # Mechanical stability check
-    stable = check_stability(elastic_tensor,
-                             poscar["lattice_matrix"],
-                             area_vector,
-                             area)
+    stable = check_stability(elastic_tensor, poscar["lattice_matrix"], area_vector, area)
     if stable:
         print("This material is mechanically stable.\n")
     else:
