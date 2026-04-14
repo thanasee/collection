@@ -7,4 +7,5 @@ A collection of Python scripts and patch files:
   - Prepare structure files for various calculations with the VASP calculator
 2. Patch files
   - Fix lattice matrix elements (forked from Chengcheng-Xiao/VASP_OPT_AXIS)
-  - Fix the call to the dftd4 function in VASP source files (since VASP version 6.4.3 when dftd4 version 4+ installed)
+  - Edit the call to the dftd4 function in VASP source files (since VASP version 6.4.3 when dftd4 version 4+ installed)
+  - Add an implicit solvation model into the VASP calculator (VASPsol, VASPsol++, and CP-VASP)
