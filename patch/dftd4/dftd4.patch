@@ -1,5 +1,5 @@
 --- src/subdftd4.F      2025-10-13 14:50:11.000000000 +0700
-+++ ../fixc/src/subdftd4.F      2026-03-11 17:18:43.000000000 +0700
++++ src/subdftd4.F      2026-03-11 17:18:43.000000000 +0700
 @@ -72,6 +72,7 @@
     type(vdw_interaction) function vdw_forces_d4(settings, structure) result (results)
  #ifdef DFTD4
