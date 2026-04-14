@@ -13,7 +13,7 @@ def usage():
 Usage: vaspMechanics.py <POSCAR input> <OUTCAR input>
 
 This script calculates Young's modulus and Poisson's Ratio as functions of crystal orientation.
-Output files can plot by Origin Program or plotMechanics.py scritpt. (For 2D)
+Output files can plot by Origin Program or plotMechanics.py script. (For 2D)
 Check mechanical stability too.
 This script read POSCAR and OUTCAR files by default.
 
@@ -83,7 +83,7 @@ def compute_elastic_2d(structure, elastic_coef):
     elastic_2d = elastic_coef[np.ix_([0, 1, 5], [0, 1, 5])] * factor_2d  # Convert unit GPa*Angstrom to N/m
     
     lattice_type = get_2d_lattice_type(structure)
-    print(f"This material is {lattice_type.capitalize()}.")
+    print(f"This material is {lattice_type}.")
     
     oblique = (lattice_type == 'oblique')
     
