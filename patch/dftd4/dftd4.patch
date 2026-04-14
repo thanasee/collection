@@ -1,0 +1,24 @@
+--- src/subdftd4.F      2025-10-13 14:50:11.000000000 +0700
++++ ../fixc/src/subdftd4.F      2026-03-11 17:18:43.000000000 +0700
+@@ -72,6 +72,7 @@
+    type(vdw_interaction) function vdw_forces_d4(settings, structure) result (results)
+ #ifdef DFTD4
+       use dftd4, only: structure_type, d4_model, realspace_cutoff, new_d4_model, get_dispersion
++      use mctc_env, only: error_type
+ #else
+       use tutor, only: vtutor
+ #endif
+@@ -80,10 +81,12 @@
+ #ifdef DFTD4
+       type(structure_type) struct
+       type(d4_model) model
++      type(error_type), allocatable ::  error
+       !
+       allocate(results%forces(3, size(structure%types)))
+       struct = convert_structure_to_dftd4(structure)
+-      call new_d4_model(model, struct)
++      call new_d4_model(error, model, struct)
++      !call new_d4_model(model, struct)
+       call get_dispersion(struct, model, settings%parameters, realspace_cutoff(), &
+          results%energy, results%forces, results%stress)
+       call convert_units_of_results(results)
