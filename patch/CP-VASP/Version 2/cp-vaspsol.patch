@@ -1,0 +1,529 @@
+!============================================================================!
+! 
+!                             Welcome to CP-VASP!
+!
+! CP-VASP is a patch to the Vienna Ab-Initio Simulation Package (VASP) 
+! to enable DFT calculations under constant electrode potential. This 
+! is essential for accurately simulating the electrochemical interface, 
+! where the Fermi level is controlled by external electrode potential. 
+! CP-VASP enables fixed-structure calculation, structural relaxation, 
+! and molecular dynamics (MD) simulations under a given electrode potential.
+!
+! This is the patch file for CP-VASP version 2. This patch is intended to be
+! applied to VASP versions 6.3 and 6.4 with VASPsol already installed. To
+! apply the patch, copy this patch file into the /src directory in your VASP
+! folder and execute the following command:
+!    patch -p0 < cp-vaspsol.patch
+!
+! If you have any challenges installing and/or running CP-VASP, please let us
+! know by posting your question in the Issues tab on our GitHub page:
+!    https://github.com/yuanyue-liu-group/CP-VASP/issues
+!
+! This code was written by Zachary Levell*, Ruoyu Wang*, Saerom Yu*, Xunhua
+! Zhao, and Yuanyue Liu. (* These authors contributed equally). If you use
+! this code in your work, please cite the following papers:
+!   •	Zhao, X.; Liu, Y. Origin of Selective Production of Hydrogen Peroxide 
+!       by Electrochemical !Oxygen Reduction. Journal of the American Chemical 
+!       Society 2021, 143 (25), 9423-9428.
+!   •	Yu, S.; Levell, Z.; Jiang, Z.; Zhao, X.; Liu, Y. What Is the 
+!       Rate-Limiting Step of Oxygen Reduction Reaction on Fe–N–C Catalysts? 
+!       Journal of the American Chemical Society 2023, 145 (46), 25352-25356. 
+!
+!============================================================================!
+
+--- main.F	2024-09-24 15:17:06.512672757 -0500
++++ main.F	2024-10-01 17:17:33.418641255 -0500
+@@ -219,6 +219,8 @@
+       USE minimax_struct, ONLY : imag_grid_handle, MINIMAX_INTEGRATION_TEST
+       USE minimax, ONLY : SET_IMAG_GRID_HANDLE, DEALLOCATE_IMAG_GRID_HANDLE
+ #endif
++!cpm
++      USE POT_K, ONLY: FERMISHIFT, FSOLV_CORR
+       USE tutor, ONLY: vtutor, isError, isAlert, isWarning, isAdvice, argument, &
+           ISYM_MD, VASP_4_4, DoubleCounting, FFTGridIsNotSufficient, &
+           HighestBandsOcccupied, PartialDOS, LVTOT, NBANDSchanged, NumberOfElectrons, &
+@@ -436,6 +438,39 @@
+       INTEGER :: IH5ERR
+       CHARACTER(3) :: POTENTIALTYP
+ #endif
++!cpm
++      REAL(q) TARGETMU  ! This corresponds to potential in experiment
++      REAL(q) echange  ! change of the Ne(amount of electrons) in a step
++      REAL(q) INIT_ECHANGE
++      REAL(q) CNNE
++      REAL(q) GCE
++      REAL(q) CAP_CP
++      REAL(q) ECHANGE_MAX  ! The maximum electron number change allowed
++      REAL(q) CAP_MAX  !  The maximum magnitude of the electron capacitance
++      REAL(q) capmin
++      REAL(q) FERMICONVERGE  ! convergence criterion for EFERMI wrt. TARGETMU
++      REAL(q) old_nele  ! Record of the previous step's electron number
++      REAL(q) old_phi  ! Record of the previous step's Fermi level
++      REAL(q) old_cap
++      REAL(q) Vne(3)
++      REAL(q) Mne
++      REAL(q) M_eta
++      REAL(q) T_eta
++      REAL(q), pointer :: Glogs(:)
++      REAL(q), pointer :: Vlogs(:)
++      REAL(q), pointer :: Xlogs(:)
++      INTEGER NEADJUST  ! change Ne in every NEADJUST ionic steps in MD
++      INTEGER NESCHEME  ! which electron adjustment scheme to use
++      INTEGER SCF_COUNTER  ! count the number of SCF loops in an ionic step
++      INTEGER eta_length
++      LOGICAL LCEP  ! turns on constant potential model
++      LOGICAL LSOLOFF ! do additional step without sol
++      LOGICAL last_LSOL
++      COMPLEX(q),ALLOCATABLE:: CHTOT_old(:,:)    ! charge-density in real / reciprocal space
++      REAL(q)   ,ALLOCATABLE::   RHOLM_old(:,:)
++      TYPE (info_struct) INFO_old
++      OVERLAP,ALLOCATABLE:: CRHODE_old(:,:,:,:)  ! augmentation occupancies
++
+ #ifdef PROFILING
+ !=======================================================================
+ !  initialise profiling
+@@ -683,7 +718,13 @@
+ #ifdef libbeef
+          ,LBEEFENS,LBEEFBAS &
+ #endif
++!cpm
++         ,TARGETMU,INIT_ECHANGE,ECHANGE_MAX,CAP_MAX,NEADJUST,NESCHEME,FERMICONVERGE,LCEP,LSOLOFF &
++         ,Vne,Mne,T_eta,M_eta,eta_length &
+          )
++      allocate(Glogs(eta_length))
++      allocate(Vlogs(eta_length))
++      allocate(Xlogs(eta_length))
+       CALL OMP_READER(IO%IU5,IO%IU0)
+       CALL MPI_READER(IO%IU5,IO%IU0)
+ 
+@@ -2782,6 +2823,9 @@
+  200        FORMAT(' number of electron ',F15.7,' magnetization ',3F15.7)
+          ENDIF
+ 
++!cpm
++         CNNE = RHOTOT(1)
++
+       ! set the partial core density
+          DENCOR=0
+          IF (INFO%LCORE) CALL RHOPAR(GRIDC,T_INFO,INFO,LATT_CUR,P,CSTRF,DENCOR,IO%IU6)
+@@ -3163,7 +3207,12 @@
+ !!      PROFILING_START('ion_loop_main')
+ !=======================================================================
+       ion: DO
+-      IF (INFO%LSTOP) EXIT ion
++!cpm
++      IF(LCEP .AND. (DYN%IBRION==1 .OR. DYN%IBRION==2 .OR. DYN%IBRION==3)) THEN
++        IF(last_LSOL .AND. ABS(TARGETMU - old_phi) < FERMICONVERGE .AND. INFO%LSTOP) EXIT ion
++      ELSE
++        IF (INFO%LSTOP) EXIT ion
++      ENDIF
+ !=======================================================================
+ 
+ !  reset broyden mixing
+@@ -3241,7 +3290,127 @@
+ 
+       CALL XML_TAG("calculation")
+ 
+-      CALL ELECTRONIC_OPTIMIZATION
++!================================ cpm modification ==================================!
++      if (LCEP) then
++        capmin = 0.1
++        if (MOD(NSTEP,NEADJUST) == 0) then
++          LSOL=.True.
++        else if (NSTEP == 1) then
++          LSOL=.True.
++        else
++          LSOL=.False.
++        end if
++        last_LSOL = LSOL
++
++        if(LSOL) then
++          SCF_COUNTER = 1
++          CHTOT_old = CHTOT
++          RHOLM_old = RHOLM
++          INFO_old = INFO
++          CRHODE_old = CRHODE
++          if (NESCHEME <= 3) then
++            DO
++              INFO%NELECT = INFO%NELECT + echange
++              INFO_old%NELECT = INFO_old%NELECT + echange
++              CHTOT = CHTOT * (INFO%NELECT) / (INFO%NELECT - echange)
++              CHTOT_old = CHTOT_old * (INFO%NELECT) / (INFO%NELECT - echange)
++              CALL ELECTRONIC_OPTIMIZATION
++              IF (NSTEP ==1 .AND. SCF_COUNTER == 1) THEN
++                echange = sign(INIT_ECHANGE, (TARGETMU - EFERMI - FERMISHIFT))
++                CAP_CP = 0.5
++                old_cap = 0.1
++              ELSE
++                CAP_CP  = (INFO%NELECT - old_nele) / (EFERMI + FERMISHIFT - old_phi)
++                if (CAP_CP .lt. capmin) then
++                  CAP_CP = old_cap
++                endif
++                if (CAP_CP .gt. CAP_MAX) then
++                  CAP_CP = CAP_MAX
++                endif
++                echange = (TARGETMU - EFERMI - FERMISHIFT) * CAP_CP
++              ENDIF
++              if (ABS(echange) .gt. ECHANGE_MAX .AND. ECHANGE_MAX .gt. 0) echange = sign(ECHANGE_MAX, echange)
++
++              old_nele = INFO%NELECT
++              old_phi = EFERMI + FERMISHIFT
++              old_cap = CAP_CP
++
++              IF (.NOT. ((NESCHEME == 1 .AND. NSTEP == 1 .AND. ABS(TARGETMU - old_phi) > FERMICONVERGE ) &
++                .OR. (NESCHEME == 3 .AND. ABS(TARGETMU - old_phi) > FERMICONVERGE))) THEN
++                exit
++              ELSE
++                IF (IO%IU0>=0) WRITE(TIU0, 2981) NSTEP, SCF_COUNTER, old_nele, old_phi, TARGETMU, CAP_CP
++                IF (IO%IU0>=0) WRITE(17, 2981) NSTEP, SCF_COUNTER, old_nele, old_phi, TARGETMU, CAP_CP
++                SCF_COUNTER = SCF_COUNTER + 1
++              ENDIF
++            ENDDO
++2981      FORMAT('CPM-scf: NSTEP= ',I4, ' SCF= ',I4, ' N_ele= ', f12.6, ' mu_e= ', f10.6,' TARGET= ',f10.6, ' cap= ', f10.6)
++
++          else if (NESCHEME == 4) then
++            IF (NSTEP > 1) THEN
++              Vne(2) = Vne(1) + (TARGETMU - old_phi) * DYN%POTIM * NEADJUST / 2 / Mne
++              echange = Vne(2) * DYN%POTIM * NEADJUST
++              INFO%NELECT = INFO%NELECT + echange
++              CHTOT = CHTOT * (INFO%NELECT) / (INFO%NELECT - echange)
++              IF (.not. LSOLOFF) echange = 0.0
++            END IF
++            CALL ELECTRONIC_OPTIMIZATION
++            Vne(3) = Vne(2) + (TARGETMU - EFERMI - FERMISHIFT) * DYN%POTIM * NEADJUST / 2 / Mne
++            old_phi = EFERMI + FERMISHIFT
++            Vne(1) = Vne(3)
++
++          else if (NESCHEME == 5) then
++            IF (NSTEP == 1) THEN
++              Glogs = 0.0
++              Vlogs = 0.0
++              Xlogs = 0.0
++            ELSE
++              CALL NHC_STEP(Vne(1),Mne,eta_length,M_eta,T_eta,DYN%POTIM*NEADJUST,&
++                                Glogs, Vlogs, Xlogs)
++              Vne(2) = Vne(1) + (TARGETMU - old_phi) * DYN%POTIM * NEADJUST / 2 / Mne
++              echange = Vne(2) * DYN%POTIM * NEADJUST
++              INFO%NELECT = INFO%NELECT + echange
++              CHTOT = CHTOT * (INFO%NELECT) / (INFO%NELECT - echange)
++              IF (.not. LSOLOFF) echange = 0.0
++            END IF
++            CALL ELECTRONIC_OPTIMIZATION
++            Vne(3) = Vne(2) + (TARGETMU - EFERMI - FERMISHIFT) * DYN%POTIM * NEADJUST / 2 / Mne
++            CALL NHC_STEP(Vne(3),Mne,eta_length,M_eta,T_eta,DYN%POTIM*NEADJUST,&
++                              Glogs, Vlogs, Xlogs)
++            old_phi = EFERMI + FERMISHIFT
++            Vne(1) = Vne(3)
++          end if
++
++          IF (LSOLOFF) THEN
++            CHTOT = CHTOT_old
++            RHOLM = RHOLM_old
++            INFO = INFO_old
++            CRHODE = CRHODE_old
++            IF (NESCHEME == 4 .or. NESCHEME == 5) THEN
++              INFO%NELECT = INFO%NELECT + echange
++              CHTOT = CHTOT * (INFO%NELECT) / (INFO%NELECT - echange)
++              echange = 0.0
++            END IF
++            MIX%LRESET=.TRUE.
++            FSOLV_CORR = .FALSE.
++            CALL SOL_VCORRECTION(INFO,T_INFO,LATT_CUR,P,WDES,GRIDC,CHTOT,CVTOT,-1.0)
++            LSOL = .FALSE.
++            Ediel_sol = 0.0
++            CALL ELECTRONIC_OPTIMIZATION
++          ENDIF
++
++        else
++          INFO%NELECT = INFO%NELECT + echange
++          CHTOT = CHTOT * (INFO%NELECT) / (INFO%NELECT - echange)
++          echange = 0.0
++          IF (IO%IU0>=0) WRITE(17, *) "NSTEP: ", NSTEP, " N_ele: ", INFO%NELECT
++          CALL ELECTRONIC_OPTIMIZATION
++        endif
++      else
++        CALL ELECTRONIC_OPTIMIZATION
++      end if
++!============================= end of cpm modifcation =================================!
++
+ 
+       ! possibly orbitals have been updated
+       ! force them to be real again be calling WVREAL_PRECISE
+@@ -3737,6 +3906,15 @@
+               IF (IO%IU0>=0) WRITE(TIU0,*)
+          ENDIF
+ 
++!cpm
++         IF (LCEP) THEN
++           GCE = (TOTEN-EENTROPY/(2+NORDER))+(CNNE-old_nele)*TARGETMU
++           if (NESCHEME == 1 .or. NESCHEME == 2 .or. NESCHEME == 3) then
++             IF (IO%IU0>=0) WRITE(17, 1111) NSTEP, old_nele, old_phi, TARGETMU, GCE, old_cap
++             IF (IO%IU0>=0) WRITE(TIU0,1111) NSTEP, old_nele, old_phi, TARGETMU, GCE, old_cap
++           end if
++         ENDIF
++
+          IF (M_CONSTRAINED()) CALL WRITE_CONSTRAINED_M(17,.TRUE.)
+ 
+          io_end
+@@ -3903,6 +4081,21 @@
+            ENDIF
+         ENDIF
+ 
++!cpm
++        IF (LCEP .AND. (NSTEP == 1 .OR. MOD(NSTEP, NEADJUST) == 0)) THEN
++          GCE = (TOTEN-EENTROPY/(2+NORDER))+(CNNE-old_nele)*TARGETMU
++          if (NESCHEME == 1 .or. NESCHEME == 2 .or. NESCHEME == 3) then
++            IF (IO%IU0>=0) WRITE(17, 1111) NSTEP, old_nele, old_phi, TARGETMU, GCE, old_cap
++            IF (IO%IU0>=0) WRITE(TIU0,1111) NSTEP, old_nele, old_phi, TARGETMU, GCE, old_cap
++          else if (NESCHEME == 4 .or. NESCHEME == 5) then
++            IF (IO%IU0>=0) WRITE(17, 1112) NSTEP, INFO%NELECT, old_phi, TARGETMU, GCE, Vne(3)
++            IF (IO%IU0>=0) WRITE(TIU0,1112) NSTEP, INFO%NELECT, old_phi, TARGETMU, GCE, Vne(3)
++          end if
++        ENDIF
++
++1111 FORMAT('CPM-ion: NSTEP= ',I4,' N_ele= ',F12.6,' mu_e= ',F10.6,' TARGETMU= ',F10.6,' GCE= ',E14.8, ' cap= ',F10.6)
++1112 FORMAT('CPM-ion: NSTEP= ',I4,' N_ele= ',F12.6,' mu_e= ',F10.6,' TARGETMU= ',F10.6,' GCE= ',E14.8, ' Vne= ',F10.6)
++
+     IF ((.NOT. LJ_ONLY) .AND. (LDO_AB_INITIO)) THEN
+         WRITE(TIU6,7270) DISMAX
+     END IF         ! LJ_ONLY AND LDO_AB_INITIO
+@@ -4101,6 +4294,18 @@
+                 IF (IO%IU0>=0) WRITE(TIU0,*)
+         ENDIF
+ 
++!cpm
++        IF (LCEP .AND. (NSTEP == 1 .OR. MOD(NSTEP, NEADJUST) == 0)) THEN
++          GCE = (TOTEN-EENTROPY/(2+NORDER))+(CNNE-old_nele)*TARGETMU
++          if (NESCHEME == 1 .or. NESCHEME == 2 .or. NESCHEME == 3) then
++            IF (IO%IU0>=0) WRITE(17, 1111) NSTEP, old_nele, old_phi, TARGETMU, GCE, old_cap
++            IF (IO%IU0>=0) WRITE(TIU0,1111) NSTEP, old_nele, old_phi, TARGETMU, GCE, old_cap
++          else if (NESCHEME == 4 .or. NESCHEME == 5) then
++            IF (IO%IU0>=0) WRITE(17, 1112) NSTEP, INFO%NELECT, old_phi, TARGETMU, GCE, Vne(3)
++            IF (IO%IU0>=0) WRITE(TIU0,1112) NSTEP, INFO%NELECT, old_phi, TARGETMU, GCE, Vne(3)
++          end if
++        ENDIF
++
+         io_end
+  7281 FORMAT(I4,' F= ',E14.8,' E0= ',E14.8,1X,' d E =',E12.6)
+ 77281 FORMAT('  mag=',3F11.4)
+@@ -4302,9 +4507,16 @@
+         IF (DYN%EDIFFG<0) INFO%LSTOP=LSTOP2
+         io_begin
+         WRITE(TIU6,130)
+-
+-        IF (INFO%LSTOP) THEN
+-           IF (IO%IU0>=0) &
++!cpm
++        IF(LCEP .AND. last_LSOL .AND. ABS(TARGETMU - old_phi) < FERMICONVERGE .AND. INFO%LSTOP) THEN
++          IF (IO%IU0>=0) &
++                WRITE(TIU0,*) 'reached required accuracy - stopping ', &
++                'structural energy minimisation'
++           WRITE(TIU6,*) ' '
++           WRITE(TIU6,*) 'reached required accuracy - stopping ', &
++                'structural energy minimisation'
++        ELSE IF(.not. LCEP .AND. INFO%LSTOP) THEN
++          IF (IO%IU0>=0) &
+                 WRITE(TIU0,*) 'reached required accuracy - stopping ', &
+                 'structural energy minimisation'
+            WRITE(TIU6,*) ' '
+@@ -5576,6 +5788,45 @@
+ 
+       END SUBROUTINE ELECTRONIC_OPTIMIZATION
+ 
++!cpm
++      SUBROUTINE NHC_STEP(Vne, Mne, M, M_eta, T_eta, delta_t, Glogs, Vlogs, Xlogs)
++        REAL(q) Vne, Mne, M_eta, T_eta, delta_t, rescale, wdt, KE, KE2, tmp, AA
++        INTEGER M, I, J
++        REAL(q) Glogs(M), Vlogs(M), Xlogs(M), Q(M)
++        REAL    wdti(3)
++
++        rescale = 1.0
++        KE = 0.5 * Mne * Vne**2
++        KE2 = KE * 2
++        Q = M_eta
++        tmp = 1 / (2 - 2**(1./3))
++        wdti = tmp * delta_t
++        wdti(2) = (1 - 2 * tmp) * delta_t
++        Glogs(1) = (KE2 - BOLKEV * T_eta) / Q(1)
++
++        DO I=1,3
++          wdt = wdti(I)
++          Vlogs(M) = Vlogs(M) + 0.25 * Glogs(M) * wdt
++          DO J=1,M-1
++            AA = exp(-0.125 * wdt * Vlogs(M-J+1))
++            Vlogs(M-J) = Vlogs(M-J) * AA**2 + 0.25 * wdt * Glogs(M-J) * AA
++          END DO
++          AA = exp(-0.5 * wdt * Vlogs(1))
++          rescale = rescale * AA
++          Glogs(1) = (rescale**2 * KE2 - BOLKEV * T_eta) / Q(1)
++          Xlogs = Xlogs + 0.5 * Vlogs * wdt
++          DO J=1,M-1
++            AA = exp(-0.125 * wdt * Vlogs(J+1))
++            Vlogs(J) = Vlogs(J) * AA**2 + 0.25 * wdt * Glogs(J) * AA
++            Glogs(J+1) = (Q(J) * Vlogs(J)**2 - BOLKEV * T_eta) / Q(J+1)
++          END DO
++          Vlogs(M) = Vlogs(M) + 0.25 * Glogs(M) * wdt
++          WRITE(TIU0, *) "I = ", I, " rescale = ", rescale
++        END DO
++        Vne = Vne * rescale
++
++      END SUBROUTINE NHC_STEP
++
+ !**********************************************************************
+ !
+ !> internal subroutine to perform RPA calculations
+--- reader.F	2024-09-24 15:17:09.870531108 -0500
++++ reader.F	2024-09-24 15:17:30.231558172 -0500
+@@ -25,6 +25,9 @@
+ #ifdef libbeef
+      &       ,LBEEFENS,LBEEFBAS &
+ #endif
++!cpm
++             ,TARGETMU,INIT_ECHANGE,ECHANGE_MAX,CAP_MAX,NEADJUST,NESCHEME,FERMICONVERGE,LCEP,LSOLOFF &
++             ,Vne,Mne,T_eta,M_eta,eta_length &
+      &       )
+ 
+ 
+@@ -85,6 +88,12 @@
+       REAL(q)   QSPIRAL(3)
+ !-MM- end of addition
+       INTEGER   FFTW_PLAN_EFFORT
++!cpm
++      REAL(q)   TARGETMU,FERMICONVERGE,INIT_ECHANGE,ECHANGE_MAX,CAP_MAX,Mne,M_eta,T_eta
++      REAL(q)   Vne(3)
++      INTEGER   NEADJUST, NESCHEME, eta_length
++      LOGICAL   LCEP
++      LOGICAL   LSOLOFF
+ 
+       CALL OPEN_INCAR_IF_FOUND(IU5, LOPEN)
+ 
+@@ -855,6 +864,50 @@
+       IF (INPLIN(1:1)=='e') FFTW_PLAN_EFFORT=0
+       IF (INPLIN(1:1)=='m') FFTW_PLAN_EFFORT=1
+ 
++!cpm
++      TARGETMU = -4.6
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'TARGETMU', TARGETMU, IERR, WRITEXMLINCAR)
++
++      INIT_ECHANGE = 0.1
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'INIT_ECHANGE', INIT_ECHANGE, IERR, WRITEXMLINCAR)
++
++      ECHANGE_MAX = 0.0
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'ECHANGE_MAX', ECHANGE_MAX, IERR, WRITEXMLINCAR)
++
++      CAP_MAX = 2.0
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'CAP_MAX', CAP_MAX, IERR, WRITEXMLINCAR)
++
++      FERMICONVERGE = 0.05
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'FERMICONVERGE', FERMICONVERGE, IERR, WRITEXMLINCAR)
++
++      LCEP = .FALSE.
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'LCEP', LCEP, IERR, WRITEXMLINCAR)
++
++      NEADJUST = 1
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'NEADJUST', NEADJUST, IERR, WRITEXMLINCAR)
++
++      NESCHEME = 1
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'NESCHEME', NESCHEME, IERR, WRITEXMLINCAR)
++
++      LSOLOFF = .FALSE.
++      IF (IBRION == 0) LSOLOFF = .TRUE.
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'LSOLOFF', LSOLOFF, IERR, WRITEXMLINCAR)
++
++      Vne = 0.0
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'Vne', Vne(3), IERR, WRITEXMLINCAR)
++
++      Mne = 660.74
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'Mne', Mne, IERR, WRITEXMLINCAR)
++
++      T_eta = TEBEG
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'T_eta', T_eta, IERR, WRITEXMLINCAR)
++
++      M_eta = BOLKEV * T_eta * 81.27
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'M_eta', M_eta, IERR, WRITEXMLINCAR)
++
++      eta_length = 1
++      CALL PROCESS_INCAR(LOPEN, IU0, IU5, 'eta_length', eta_length, IERR, WRITEXMLINCAR)
++
+ #ifdef libbeef
+ ! read in flag LBEEFENS 
+       LBEEFENS=.FALSE.
+--- pot.F	2024-09-24 15:17:17.231057889 -0500
++++ pot.F	2024-09-24 15:17:27.038876291 -0500
+@@ -364,7 +364,9 @@
+ !-----------------------------------------------------------------------
+ ! add the dielectric corrections to CVTOT and the energy
+ !-----------------------------------------------------------------------
+-      CALL SOL_Vcorrection(INFO,T_INFO,LATT_CUR,P,WDES,GRIDC,CHTOT,CVTOT)
++!cpm
++      !CALL SOL_Vcorrection(INFO,T_INFO,LATT_CUR,P,WDES,GRIDC,CHTOT,CVTOT)
++      CALL SOL_VCORRECTION(INFO,T_INFO,LATT_CUR,P,WDES,GRIDC,CHTOT,CVTOT, 1.000)
+ ! solvation__
+ !-----------------------------------------------------------------------
+ !  add local pseudopotential potential
+--- solvation.F	2024-09-24 15:17:14.133153434 -0500
++++ solvation.F	2024-09-24 15:17:33.609006127 -0500
+@@ -1778,6 +1778,10 @@
+  PUBLIC :: GET_FERMISHIFT
+  ! vaclevel
+ 
++ !cpm
++ REAL(q), PUBLIC, SAVE :: FERMISHIFT = 0._q
++ LOGICAL, PUBLIC, SAVE :: FSOLV_CORR = .TRUE.
++
+  PRIVATE :: IONIC_CHARGE, GETRCORE, Fcorrection, JDFTX_INTERFACE
+ 
+  INTEGER, PRIVATE, SAVE :: PK_counter = 1
+@@ -2219,8 +2223,11 @@
+ !-------------------------------------------------------------
+ !calculate force correction,flag=5(not used)
+ !-------------------------------------------------------------
++!cpm
++   IF (FSOLV_CORR) THEN
+    CALL Fcorrection(SP_GRIDC,SP_P,SP_T_INFO,SP_LATT_CUR, &
+         & Vcorr,Vdiel, EIFOR_SOL)
++   ENDIF
+ 
+ !-------------------------------------------------------------
+ !net correction potential
+@@ -2792,6 +2799,8 @@
+   IF (SP_IO%IU0>=0)  WRITE(SP_IO%IU0,*) 'VACPOT_PSP = ', VACPOT_PSP
+ #endif
+   VACPOT = VACPOT_POIS - VACPOT_PSP
++!cpm
++  FERMISHIFT = VACPOT
+   IF (SP_IO%IU0>=0)  WRITE(SP_IO%IU0,*) ' FERMI_SHIFT = ', VACPOT
+ !#ifdef debugsolwf
+ !  !shift by vacpot                                                
+@@ -3198,8 +3207,9 @@
+ !
+ !
+ !***********************************************************************
++!cpm - added plusorminus
+   SUBROUTINE SOL_VCORRECTION(INFO, T_INFO, LATT_CUR, P, WDES, GRIDC, &
+-       & CHTOT, CVTOT)
++       & CHTOT, CVTOT, plusorminus)
+ 
+     USE base
+     USE poscar
+@@ -3226,6 +3236,9 @@
+     COMPLEX(q), ALLOCATABLE :: Vcorr(:)
+     INTEGER :: I
+ 
++!cpm
++    REAL plusorminus
++
+ ! early exit if possible
+     IF (.NOT.LSOL) RETURN
+ 
+@@ -3238,8 +3251,9 @@
+     CALL VCORRECTION(GRIDC, P, LATT_CUR, T_INFO, WDES, &
+          & CHTOT, Vcorr, Ecorr, EIFOR_SOL) 
+ 
++!cpm
+     DO I = 1, GRIDC%RC%NP
+-       CVTOT(I,1) = CVTOT(I,1) + Vcorr(I)
++       CVTOT(I,1) = CVTOT(I,1) + Vcorr(I) * plusorminus
+     ENDDO
+ 
+     Ediel_sol = Ecorr
