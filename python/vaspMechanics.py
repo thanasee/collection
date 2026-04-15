@@ -48,7 +48,7 @@ def read_elastic_tensor(outcar_file):
  
     Extracts the 'TOTAL ELASTIC MODULI (kBar)' section, converts units
     from kBar to GPa, and reorders indices from VASP convention
-    (xx, yy, zz, xy, yz, xz) to Voigt notation (11, 22, 33, 44, 55, 66).
+    (xx, yy, zz, xy, yz, xz) to Voigt notation (1, 2, 3, 4, 5, 6).
  
     Parameters
     ----------
