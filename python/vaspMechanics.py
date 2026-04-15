@@ -82,7 +82,7 @@ def read_elastic_tensor(outcar_file):
     elastic_vasp = np.array([[float(x) for x in line.split()[1:]]
                              for line in moduli_lines]) / 10 # Convert unit kBar to GPa
     
-    # Reorder from VASP convention (xx,yy,zz,xy,yz,xz) to Voigt notation (11,22,33,44,55,66)
+    # Reorder from VASP convention (xx,yy,zz,xy,yz,xz) to Voigt notation (1,2,3,4,5,6)
     elastic_coef = elastic_vasp[:, [0, 1, 2, 4, 5, 3]][[0, 1, 2, 4, 5, 3], :]
     
     return elastic_coef
