@@ -6,7 +6,7 @@ import numpy as np
 from ase.io import read
 
 def usage():
-
+    """Print usage information and exit."""
     text = """
 Usage: vaspPiezoelectric.py <POSCAR input> <OUTCAR input>
 
@@ -19,6 +19,18 @@ This script was developed by Thanasee Thanasarnsurapong.
     exit(0)
 
 def read_structure(poscar_file):
+    """Read atomic structure from a POSCAR file using ASE.
+ 
+    Parameters
+    ----------
+    poscar_file : str
+        Path to the POSCAR file.
+ 
+    Returns
+    -------
+    structure : ase.Atoms
+        ASE Atoms object containing the crystal structure.
+    """
 
     if not os.path.exists(poscar_file):
         print(f"ERROR!\nFile: {poscar_file} does not exist.")
@@ -27,6 +39,26 @@ def read_structure(poscar_file):
     return read(poscar_file)
 
 def read_piezo_stress(outcar_file):
+    """Read the piezoelectric stress tensor from a VASP OUTCAR file.
+ 
+    Searches for the 'PIEZOELECTRIC TENSOR (including local field effects)'
+    section and extracts the 3x6 tensor. Columns are reordered from VASP
+    convention (xx, yy, zz, xy, yz, xz) to Voigt notation
+    (1, 2, 3, 4, 5, 6).
+ 
+    Parameters
+    ----------
+    outcar_file : str
+        Path to the VASP OUTCAR file.
+ 
+    Returns
+    -------
+    outcar_lines : list of str
+        All lines read from the OUTCAR file, passed downstream for elastic
+        tensor extraction without re-reading the file.
+    piezostress_coef : numpy.ndarray, shape (3, 6)
+        Piezoelectric stress tensor in Voigt notation, in units of C/m**2.
+    """
 
     if not os.path.exists(outcar_file):
         print(f"ERROR!\nFile: {outcar_file} does not exist.")
@@ -56,6 +88,27 @@ def read_piezo_stress(outcar_file):
     return outcar_lines, piezostress_coef
 
 def read_elastic_tensor(outcar_lines):
+    """Read the elastic stiffness tensor from VASP OUTCAR lines.
+ 
+    Searches for the 'TOTAL ELASTIC MODULI (kBar)' section and extracts the
+    6x6 tensor. Values are converted from kBar to GPa, and columns/rows are
+    reordered from VASP convention (xx, yy, zz, xy, yz, xz) to Voigt notation
+    (1, 2, 3, 4, 5, 6).
+ 
+    Parameters
+    ----------
+    outcar_lines : list of str
+        All lines from the VASP OUTCAR file, as returned by read_piezo_stress().
+ 
+    Returns
+    -------
+    moduli_index : int or None
+        Line index of the 'TOTAL ELASTIC MODULI (kBar)' header in outcar_lines.
+        Returns None if the section is not found.
+    elastic_coef : numpy.ndarray, shape (6, 6), or None
+        Elastic stiffness tensor in Voigt notation, in units of GPa.
+        Returns None if the section is not found.
+    """
 
     moduli_index = None
     for i, line in enumerate(outcar_lines):
@@ -71,12 +124,25 @@ def read_elastic_tensor(outcar_lines):
     elastic_vasp = np.array([[float(x) for x in line.split()[1:]]
                               for line in moduli_lines]) / 10  # Convert kBar to GPa
 
-    # Reorder from VASP convention (xx,yy,zz,xy,yz,xz) to Voigt notation (11,22,33,44,55,66)
+    # Reorder from VASP convention (xx,yy,zz,xy,yz,xz) to Voigt notation (1,2,3,4,5,6)
     elastic_coef = elastic_vasp[:, [0, 1, 2, 4, 5, 3]][[0, 1, 2, 4, 5, 3], :]
 
     return moduli_index, elastic_coef
 
 def read_elastic_from_file():
+    """Read the elastic stiffness tensor from a local 'Elastic.dat' file.
+ 
+    The file must contain either a 3x3 matrix (2D materials, in N/m) or a
+    6x6 matrix (3D materials, in GPa), with comment lines starting with '#'
+    ignored.
+ 
+    Returns
+    -------
+    elastic_coef : numpy.ndarray, shape (3, 3) or (6, 6), or None
+        Elastic stiffness tensor read from file.
+        Returns None if 'Elastic.dat' does not exist.
+        Exits if the matrix shape is neither (3, 3) nor (6, 6).
+    """
 
     if not os.path.exists('Elastic.dat'):
         return None
@@ -98,6 +164,17 @@ def read_elastic_from_file():
         exit(0)
 
 def read_elastic_manual():
+    """Prompt the user to enter the elastic stiffness tensor manually.
+ 
+    Accepts either 9 components (3x3, for 2D materials in N/m) or 36
+    components (6x6, for 3D materials in GPa) entered as space-separated
+    values on a single line. Loops until valid input is provided.
+ 
+    Returns
+    -------
+    elastic_coef : numpy.ndarray, shape (3, 3) or (6, 6)
+        Elastic stiffness tensor entered by the user.
+    """
 
     print("""Enter elastic tensor manually:
 For 2D materials (N/m)
@@ -122,6 +199,25 @@ C16 C26 C36 C46 C56 C66""")
             print("Error! Input must be 9 or 36 components.")
 
 def get_elastic_tensor(outcar_lines):
+    """Obtain the elastic stiffness tensor using a three-level fallback chain.
+ 
+    First attempts to read from the OUTCAR file. If not found, falls back to
+    reading from a local 'Elastic.dat' file. If that also does not exist,
+    prompts the user for manual input.
+ 
+    Parameters
+    ----------
+    outcar_lines : list of str
+        All lines from the VASP OUTCAR file, as returned by read_piezo_stress().
+ 
+    Returns
+    -------
+    moduli_index : int or None
+        Line index of the elastic moduli section in outcar_lines if found from
+        OUTCAR, or None if obtained from file or manual input.
+    elastic_coef : numpy.ndarray, shape (3, 3) or (6, 6)
+        Elastic stiffness tensor in GPa (3D) or N/m (2D).
+    """
 
     moduli_index, elastic_coef = read_elastic_tensor(outcar_lines)
 
@@ -139,6 +235,45 @@ def get_elastic_tensor(outcar_lines):
     return None, elastic_coef
 
 def compute_piezo_2d(structure, piezostress_coef, elastic_coef, moduli_index):
+    """Compute the 2D piezoelectric stress tensor and elastic tensor for a 2D material.
+ 
+    Calculates the vacuum-layer thickness (factor_2d) from the out-of-plane
+    lattice vector and uses it to convert bulk VASP tensors to 2D sheet
+    quantities. Only the in-plane components (indices 1, 2, 6 in Voigt
+    notation, corresponding to xx, yy, xy) are retained.
+ 
+    Unit conversions
+    ----------------
+    piezostress : C/m**2 × Å  →  10**-10 C/m
+    elastic     : GPa × Å / 10  →  N/m
+ 
+    Parameters
+    ----------
+    structure : ase.Atoms
+        Crystal structure read from POSCAR, used to compute the vacuum
+        layer thickness.
+    piezostress_coef : numpy.ndarray, shape (3, 6)
+        Full 3D piezoelectric stress tensor in Voigt notation (C/m**2), as
+        returned by read_piezo_stress().
+    elastic_coef : numpy.ndarray, shape (3, 3) or (6, 6)
+        Elastic stiffness tensor. Shape and units depend on the source:
+        (6, 6) in GPa from OUTCAR, (3, 3) in N/m from Elastic.dat,
+        or (6, 6) in GPa from manual input.
+    moduli_index : int or None
+        Line index of the elastic section in OUTCAR. Used to determine
+        whether elastic_coef originates from OUTCAR (requires unit conversion)
+        or from a fallback source (already in target units).
+ 
+    Returns
+    -------
+    piezostress_2d : numpy.ndarray, shape (3, 3)
+        In-plane piezoelectric stress tensor in units of 10**-10 C/m.
+    elastic_2d : numpy.ndarray, shape (3, 3)
+        In-plane elastic stiffness tensor in units of N/m.
+    factor_2d : float
+        Out-of-plane cell thickness in Å, used as the 2D conversion
+        factor and passed to check_stability_2d().
+    """
 
     vector_a = structure.cell[0]
     vector_b = structure.cell[1]
@@ -162,6 +297,21 @@ def compute_piezo_2d(structure, piezostress_coef, elastic_coef, moduli_index):
     return piezostress_2d, elastic_2d, factor_2d
 
 def check_stability_2d(elastic_2d, factor_2d):
+    """Check the mechanical stability of a 2D material from its elastic tensor.
+ 
+    A 2D material is mechanically stable if all eigenvalues of the in-plane
+    elastic tensor are positive (Born stability criteria). The threshold is
+    scaled by factor_2d to remain consistent with the Å-based unit convention
+    used in the 2D branch.
+ 
+    Parameters
+    ----------
+    elastic_2d : numpy.ndarray, shape (3, 3)
+        In-plane elastic stiffness tensor in units of N/m.
+    factor_2d : float
+        Out-of-plane cell thickness in Å, used to scale the stability
+        threshold.
+    """
 
     if np.all(np.linalg.eigvalsh(elastic_2d) > 1e-5 * factor_2d):
         print("This material is mechanically stable.")
@@ -170,6 +320,17 @@ def check_stability_2d(elastic_2d, factor_2d):
         exit(0)
 
 def write_elastic_2d(elastic_2d):
+    """Write the 2D elastic stiffness tensor to file and print to screen.
+ 
+    Saves the in-plane elastic tensor components to 'Elastic.dat' and prints
+    the same values to standard output.
+ 
+    Parameters
+    ----------
+    elastic_2d : numpy.ndarray, shape (3, 3)
+        In-plane elastic stiffness tensor in units of N/m, with components
+        ordered as [[C11, C12, C16], [C12, C22, C26], [C16, C26, C66]].
+    """
 
     C11 = elastic_2d[0, 0]; C22 = elastic_2d[1, 1]; C66 = elastic_2d[2, 2]
     C12 = elastic_2d[0, 1]; C16 = elastic_2d[0, 2]; C26 = elastic_2d[1, 2]
@@ -197,6 +358,18 @@ def write_elastic_2d(elastic_2d):
     print(f"   {C16:>11.4f} {C26:>11.4f} {C66:>11.4f}\n")
 
 def write_piezostress_2d(piezostress_2d):
+    """Write the 2D piezoelectric stress tensor to file and print to screen.
+ 
+    Saves the in-plane piezoelectric stress tensor components to
+    'Piezoelectric_Stress.dat' and prints the same values to standard output.
+ 
+    Parameters
+    ----------
+    piezostress_2d : numpy.ndarray, shape (3, 3)
+        In-plane piezoelectric stress tensor in units of 10**-10 C/m, with
+        components ordered as [[e11, e12, e16], [e21, e22, e26],
+        [e31, e32, e36]].
+    """
 
     e11 = piezostress_2d[0, 0]; e12 = piezostress_2d[0, 1]; e16 = piezostress_2d[0, 2]
     e21 = piezostress_2d[1, 0]; e22 = piezostress_2d[1, 1]; e26 = piezostress_2d[1, 2]
@@ -225,6 +398,17 @@ def write_piezostress_2d(piezostress_2d):
     print(f"   {e31:>11.4f} {e32:>11.4f} {e36:>11.4f}\n")
 
 def write_piezostrain_2d(piezostrain_2d):
+    """Write the 2D piezoelectric strain tensor to file and print to screen.
+ 
+    Saves the in-plane piezoelectric strain tensor components to
+    'Piezoelectric_Strain.dat' and prints the same values to standard output.
+ 
+    Parameters
+    ----------
+    piezostrain_2d : numpy.ndarray, shape (3, 3)
+        In-plane piezoelectric strain tensor in units of pm/V, with components
+        ordered as [[d11, d12, d16], [d21, d22, d26], [d31, d32, d36]].
+    """
 
     d11 = piezostrain_2d[0, 0]; d12 = piezostrain_2d[0, 1]; d16 = piezostrain_2d[0, 2]
     d21 = piezostrain_2d[1, 0]; d22 = piezostrain_2d[1, 1]; d26 = piezostrain_2d[1, 2]
@@ -253,6 +437,30 @@ def write_piezostrain_2d(piezostrain_2d):
     print(f"   {d31:>11.4f} {d32:>11.4f} {d36:>11.4f}\n")
 
 def run_2d(structure, piezostress_coef, elastic_coef, moduli_index):
+    """Run the full 2D piezoelectric calculation pipeline.
+ 
+    Orchestrates the 2D workflow in order: compute 2D tensors, write elastic
+    tensor, write piezoelectric stress tensor, check mechanical stability,
+    compute the piezoelectric strain tensor (d = e · S), and write the result.
+ 
+    The piezoelectric strain tensor is obtained from:
+        d = e · S,  where S = C**-1 (compliance tensor)
+ 
+    Unit conversion for piezostrain:
+        e [10**-10 C/m] · S [m/N] × 100  →  d [pm/V]
+ 
+    Parameters
+    ----------
+    structure : ase.Atoms
+        Crystal structure read from POSCAR.
+    piezostress_coef : numpy.ndarray, shape (3, 6)
+        Full piezoelectric stress tensor in Voigt notation (C/m**2).
+    elastic_coef : numpy.ndarray, shape (3, 3) or (6, 6)
+        Elastic stiffness tensor from OUTCAR, file, or manual input.
+    moduli_index : int or None
+        Line index of the elastic section in OUTCAR, or None if obtained
+        from a fallback source.
+    """
 
     piezostress_2d, elastic_2d, factor_2d = compute_piezo_2d(structure, piezostress_coef, elastic_coef, moduli_index)
 
@@ -266,6 +474,28 @@ def run_2d(structure, piezostress_coef, elastic_coef, moduli_index):
     write_piezostrain_2d(piezostrain_2d)
 
 def compute_piezo_3d(piezostress_coef, elastic_coef):
+    """Validate and prepare the 3D piezoelectric and elastic tensors.
+ 
+    Checks that the elastic tensor is 6x6 (required for 3D materials) and
+    returns deep copies of both tensors to prevent in-place modification of
+    the original arrays.
+ 
+    Parameters
+    ----------
+    piezostress_coef : numpy.ndarray, shape (3, 6)
+        Full piezoelectric stress tensor in Voigt notation (C/m**2), as
+        returned by read_piezo_stress().
+    elastic_coef : numpy.ndarray, shape (6, 6)
+        Elastic stiffness tensor in GPa. Must be 6x6; exits with an error
+        message if the shape does not match.
+ 
+    Returns
+    -------
+    piezostress_3d : numpy.ndarray, shape (3, 6)
+        Copy of the piezoelectric stress tensor (C/m**2).
+    elastic_3d : numpy.ndarray, shape (6, 6)
+        Copy of the elastic stiffness tensor (GPa).
+    """
 
     if elastic_coef.shape != (6, 6):
         print("ERROR! Elastic tensor for 3D materials must be 6x6. Got shape:", elastic_coef.shape)
@@ -277,6 +507,16 @@ def compute_piezo_3d(piezostress_coef, elastic_coef):
     return piezostress_3d, elastic_3d
 
 def check_stability_3d(elastic_3d):
+    """Check the mechanical stability of a 3D material from its elastic tensor.
+
+   A 3D material is mechanically stable if all eigenvalues of the elastic
+   stiffness tensor are positive (Born stability criteria).
+
+   Parameters
+   ----------
+   elastic_3d : numpy.ndarray, shape (6, 6)
+       Elastic stiffness tensor in units of GPa.
+   """
 
     if np.all(np.linalg.eigvalsh(elastic_3d) > 1e-5):
         print("This material is mechanically stable.")
@@ -285,6 +525,16 @@ def check_stability_3d(elastic_3d):
         exit(0)
 
 def write_elastic_3d(elastic_3d):
+    """Write the 3D elastic stiffness tensor to file and print to screen.
+ 
+    Saves the full 6x6 elastic tensor to 'Elastic.dat' and prints the same
+    values to standard output.
+ 
+    Parameters
+    ----------
+    elastic_3d : numpy.ndarray, shape (6, 6)
+        Elastic stiffness tensor in units of GPa in Voigt notation.
+    """
 
     C = elastic_3d
 
@@ -316,6 +566,18 @@ def write_elastic_3d(elastic_3d):
     print()
 
 def write_piezostress_3d(piezostress_3d):
+    """Write the 3D piezoelectric stress tensor to file and print to screen.
+ 
+    Saves the full 3x6 piezoelectric stress tensor to 'Piezoelectric_Stress.dat'
+    and prints the same values to standard output.
+ 
+    Parameters
+    ----------
+    piezostress_3d : numpy.ndarray, shape (3, 6)
+        Piezoelectric stress tensor in Voigt notation in units of C/m**2, with
+        rows indexed by the electric field direction (x, y, z) and columns
+        by the strain component (1, 2, 3, 4, 5, 6).
+    """
 
     E = piezostress_3d
 
@@ -341,6 +603,18 @@ def write_piezostress_3d(piezostress_3d):
     print()
 
 def write_piezostrain_3d(piezostrain_3d):
+    """Write the 3D piezoelectric strain tensor to file and print to screen.
+ 
+    Saves the full 3x6 piezoelectric strain tensor to 'Piezoelectric_Strain.dat'
+    and prints the same values to standard output.
+ 
+    Parameters
+    ----------
+    piezostrain_3d : numpy.ndarray, shape (3, 6)
+        Piezoelectric strain tensor in Voigt notation in units of pm/V, with
+        rows indexed by the electric field direction (x, y, z) and columns
+        by the strain component (1, 2, 3, 4, 5, 6).
+    """
 
     D = piezostrain_3d
 
@@ -366,6 +640,26 @@ def write_piezostrain_3d(piezostrain_3d):
     print()
 
 def run_3d(piezostress_coef, elastic_coef):
+    """Run the full 3D piezoelectric calculation pipeline.
+ 
+    Orchestrates the 3D workflow in order: validate and copy tensors, write
+    elastic tensor, write piezoelectric stress tensor, check mechanical
+    stability, compute the piezoelectric strain tensor (d = e · S), and write
+    the result.
+ 
+    The piezoelectric strain tensor is obtained from:
+        d = e · S,  where S = C**-1 (compliance tensor)
+ 
+    Unit conversion for piezostrain:
+        e [C/m**2] · S [1/GPa] × 1000  →  d [pm/V]
+ 
+    Parameters
+    ----------
+    piezostress_coef : numpy.ndarray, shape (3, 6)
+        Full piezoelectric stress tensor in Voigt notation (C/m**2).
+    elastic_coef : numpy.ndarray, shape (6, 6)
+        Elastic stiffness tensor in GPa.
+    """
 
     piezostress_3d, elastic_3d = compute_piezo_3d(piezostress_coef, elastic_coef)
 
@@ -379,6 +673,22 @@ def run_3d(piezostress_coef, elastic_coef):
     write_piezostrain_3d(piezostrain_3d)
 
 def main():
+    """Main entry point for the vaspPiezoelectric script.
+ 
+    Parses command-line arguments, reads the crystal structure and OUTCAR
+    file, obtains the elastic tensor via the fallback chain, prompts the user
+    to select 2D or 3D material type, and dispatches to the appropriate
+    calculation pipeline (run_2d or run_3d).
+ 
+    Output files produced
+    ---------------------
+    Elastic.dat
+        Elastic stiffness tensor (N/m for 2D, GPa for 3D).
+    Piezoelectric_Stress.dat
+        Piezoelectric stress tensor (10**-10 C/m for 2D, C/m**2 for 3D).
+    Piezoelectric_Strain.dat
+        Piezoelectric strain tensor (pm/V for both 2D and 3D).
+    """
 
     if '-h' in argv or len(argv) != 3:
         usage()
