@@ -5,6 +5,7 @@ import os
 import numpy as np
 
 def usage():
+    """Print usage information and exit."""
     
     text = """
 Usage: poscar2control.py <input>
@@ -17,14 +18,41 @@ This script was developed by Thanasee Thanasarnsurapong.
     exit(0)
 
 def read_POSCAR(filepath):
-    
+    """Read a VASP POSCAR file and return its contents as a dictionary.
+
+    Supports both VASP4 (no element line) and VASP5 (with element line) formats,
+    scalar and negative (volume-based) scaling factors, a 3-component scaling
+    vector, Selective Dynamics, and both Direct and Cartesian coordinate modes.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to the POSCAR file to read.
+
+    Returns
+    -------
+    dict with keys:
+        lattice_matrix      : np.ndarray, shape (3, 3)  — lattice vectors in Å
+        elements            : list[str]                 — element symbols
+        atom_counts         : list[int]                 — number of atoms per element
+        total_atoms         : int                       — total number of atoms
+        positions_cartesian : np.ndarray, shape (N, 3)  — Cartesian coordinates in Å
+        positions_direct    : np.ndarray, shape (N, 3)  — fractional coordinates
+        species             : list[str]                 — element symbol per atom
+        selective_dynamics  : bool                      — whether Selective Dynamics is present
+        flags               : np.ndarray or None        — T/F flags per atom, or None
+    """
+
     if not os.path.exists(filepath):
         print(f"ERROR!\nFile: {filepath} does not exist.")
         exit(1)
-    
+
     with open(filepath, 'r') as poscar:
         lines = poscar.readlines()
-    
+
+    # Parse the scaling factor (line 2):
+    # - 1 value  : uniform scalar; negative means target volume in Å**3
+    # - 3 values : per-axis scale applied row-wise to the lattice matrix
     if len(lines[1].split()) == 1:
         raw_scale = float(lines[1])
         raw_lattice_matrix = np.array([[float(x) for x in line.split()]
@@ -45,7 +73,9 @@ def read_POSCAR(filepath):
     else:
         print("ERROR! The scaling factor must be 1 or 3 components.")
         exit(1)
-    
+
+    # Detect VASP4 vs VASP5 format by checking whether line 6 starts with a number.
+    # VASP4 has no element-symbol line, so the user is prompted for species names.
     elements = []
     is_number = lines[5].split()[0].isdecimal()
     if is_number:
@@ -62,7 +92,8 @@ def read_POSCAR(filepath):
         selective_dynamics = lines[6].lower().startswith('s')
         position_start = 8 if selective_dynamics else 7
     else:
-        # VASP5 format: element symbols present
+        # VASP5 format: element symbols present.
+        # Strip potential PAW/GGA suffixes such as '_pv' or '/GGA'.
         raw_elements = lines[5].split()
         for name in raw_elements:
             elements.append(name.split('/')[0].split('_')[0])
@@ -77,52 +108,87 @@ def read_POSCAR(filepath):
     positions = np.array([[float(x) for x in lines[i].split()[:3]]
                           for i in range(position_start, position_stop)])
 
+    # Build a per-atom species list (e.g. ['Mo', 'Mo', 'S', 'S', 'S'])
     species = [x for i, x in enumerate(elements)
                for _ in range(atom_counts[i])]
 
+    # Read Selective Dynamics T/F flags if present
     flags = None
     if selective_dynamics:
         flags = np.array([[x for x in lines[i].split()[3:6]]
                           for i in range(position_start, position_stop)])
 
-    # Detect coordinate type
+    # Convert coordinates to both Direct and Cartesian representations
     is_direct = lines[position_start - 1].strip().lower().startswith('d')
     if is_direct:
-        # If direct coordinate then compute cartesian coordinate
         positions_direct = positions % 1.0
         positions_cartesian = direct_to_cartesian(lattice_matrix, positions_direct)
     else:
-        # If cartesian coordinate then direct coordinate
         positions_cartesian = positions * scale
         positions_direct = cartesian_to_direct(lattice_matrix, positions_cartesian)
-    
-    return {"lattice_matrix": lattice_matrix,
-            "elements": elements,
-            "atom_counts": atom_counts,
-            "total_atoms": total_atoms,
-            "positions_cartesian": positions_cartesian,
-            "positions_direct": positions_direct,
-            "species": species,
-            "selective_dynamics": selective_dynamics,
-            "flags": flags if selective_dynamics else None}
 
-def direct_to_cartesian(lattice_matrix,
-                        positions_direct):
-    
+    return {"lattice_matrix":     lattice_matrix,
+            "elements":           elements,
+            "atom_counts":        atom_counts,
+            "total_atoms":        total_atoms,
+            "positions_cartesian": positions_cartesian,
+            "positions_direct":   positions_direct,
+            "species":            species,
+            "selective_dynamics": selective_dynamics,
+            "flags":              flags if selective_dynamics else None}
+
+def direct_to_cartesian(lattice_matrix, positions_direct):
+    """Convert fractional (Direct) coordinates to Cartesian coordinates.
+
+    Uses the relation:  r_cart = r_direct @ lattice_matrix
+
+    Parameters
+    ----------
+    lattice_matrix    : np.ndarray, shape (3, 3) — row vectors of the lattice in Å
+    positions_direct  : np.ndarray, shape (N, 3) — fractional coordinates
+
+    Returns
+    -------
+    positions_cartesian : np.ndarray, shape (N, 3) — Cartesian coordinates in Å
+    """
+
     positions = positions_direct % 1.0
     positions_cartesian = np.dot(positions, lattice_matrix)
-    
+
     return positions_cartesian
 
-def cartesian_to_direct(lattice_matrix,
-                        positions_cartesian):
-    
+
+def cartesian_to_direct(lattice_matrix, positions_cartesian):
+    """Convert Cartesian coordinates to fractional (Direct) coordinates.
+
+    Uses the relation:  r_direct = r_cart @ lattice_matrix⁻¹
+
+    Parameters
+    ----------
+    lattice_matrix      : np.ndarray, shape (3, 3) — row vectors of the lattice in Å
+    positions_cartesian : np.ndarray, shape (N, 3) — Cartesian coordinates in Å
+
+    Returns
+    -------
+    positions_direct : np.ndarray, shape (N, 3) — fractional coordinates in [0, 1)
+    """
+
     positions_direct = np.dot(positions_cartesian, np.linalg.inv(lattice_matrix)) % 1.0
-    
+
     return positions_direct
 
 def get_vacuum_index():
-    
+    """
+    Prompt the user to specify whether the system is a 2D material.
+ 
+    If 2D, asks for the vacuum direction (a, b, or c) and returns the
+    corresponding axis index. If 3D, returns None.
+ 
+    Returns
+    -------
+    int or None
+        0 for a, 1 for b, 2 for c, or None for 3D bulk material.
+    """
     while True:
         dim = input("2D materials or not (Y/N): ").strip().lower()
         if dim[0] == 'y':
@@ -137,10 +203,29 @@ def get_vacuum_index():
             return None
         else:
             print("Input must be Y or N!")
-
-def get_ngrid(reciprocal_matrix,
-              index):
  
+ 
+def get_ngrid(reciprocal_matrix, index):
+    """
+    Prompt the user for a q-point spacing and compute the q-point mesh.
+ 
+    The mesh size along each reciprocal direction is computed as:
+        n_i = round(|b_i| / (spacing * 2π))
+    where |b_i| is the length of the i-th reciprocal lattice vector in
+    units of 2π/Å and spacing is in units of 2π/Å.
+    The vacuum direction (if any) is forced to 1.
+ 
+    Parameters
+    ----------
+    reciprocal_matrix : ndarray (3, 3), reciprocal lattice vectors as rows
+                        in units of 2π/Å
+    index             : int or None, axis index of the vacuum direction,
+                        or None for 3D
+ 
+    Returns
+    -------
+    ngrid : list of int, q-point mesh size [n1, n2, n3]
+    """
     while True:
         spacing = input("Enter q-point spacing in 2π/Å: ").strip()
         try:
@@ -158,9 +243,20 @@ def get_ngrid(reciprocal_matrix,
                 print("Spacing must be positive.")
         except ValueError:
             print("Invalid input. Please enter a number.")
-
-def get_supercell_matrix():
  
+ 
+def get_supercell_matrix():
+    """
+    Prompt the user for a supercell matrix used in the force constant calculation.
+ 
+    Expects 3 positive integers corresponding to the supercell expansion
+    along each lattice direction, matching the supercell used in VASP
+    for the force constant calculation.
+ 
+    Returns
+    -------
+    supercell_matrix : str, space-separated integers e.g. "4 4 4"
+    """
     while True:
         supercell_matrix = input("Enter Supercell Matrix (3 elements): ")
         try:
@@ -171,9 +267,22 @@ def get_supercell_matrix():
                 print("Input must be 3 components and positive integers!")
         except ValueError:
             print("Invalid input. Please enter integer numbers separated by spaces.")
-
-def get_phonon_flags():
  
+ 
+def get_phonon_flags():
+    """
+    Prompt the user for the phonon process order and generate the
+    corresponding ShengBTE &flags namelist block.
+ 
+    For 3-phonon: sets convergence=.true. and nthreads=-1 (use all threads).
+    For 4-phonon: asks for CPU or GPU parallelization. CPU sets
+    convergence=.true., GPU sets convergence=.false. (iterative solver
+    not supported on GPU).
+ 
+    Returns
+    -------
+    str : the closing portion of the &flags namelist block including &end
+    """
     while True:
         n_phonon = input("Enter n phonon process: ")
         try:
@@ -203,16 +312,29 @@ def get_phonon_flags():
                 print("Input must be 3 or 4!")
         except ValueError:
             print("Invalid input. Please enter integer numbers.")
-
-def write_CONTROL(filepath,
-                  lattice_matrix,
-                  elements,
-                  atom_counts,
-                  positions_direct,
-                  ngrid,
-                  supercell_matrix,
-                  phonon_flags):
  
+ 
+def write_CONTROL(filepath, lattice_matrix, elements, atom_counts, positions_direct,
+                  ngrid, supercell_matrix, phonon_flags):
+    """
+    Write the ShengBTE CONTROL file in Fortran namelist format.
+ 
+    Constructs the &allocations, &crystal, &parameters, and &flags
+    namelists and writes them to the specified file. The lattice factor
+    lfactor is set to 0.1 to convert Angstrom to nanometers as required
+    by ShengBTE.
+ 
+    Parameters
+    ----------
+    filepath         : str, output file path
+    lattice_matrix   : ndarray (3, 3), lattice vectors as rows in Angstrom
+    elements         : list of str, element symbols in order
+    atom_counts      : list of int, number of atoms per element
+    positions_direct : ndarray (N, 3), fractional coordinates in [0, 1)
+    ngrid            : list of int, q-point mesh [n1, n2, n3]
+    supercell_matrix : str, space-separated supercell expansion integers
+    phonon_flags     : str, closing &flags namelist content including &end
+    """
     total_atoms = sum(atom_counts)
     elements_str = " ".join([f'"{element}"' for element in elements])
     types = " ".join([str(i + 1) for i, count in enumerate(atom_counts)
@@ -255,9 +377,13 @@ def write_CONTROL(filepath,
  
     with open(filepath, 'w') as o:
         o.write(control)
-
-def main():
  
+ 
+def main():
+    """
+    Main entry point. Parses arguments, reads the POSCAR, collects user
+    inputs interactively, and writes the CONTROL file.
+    """
     if '-h' in argv or '--help' in argv or len(argv) != 2:
         usage()
  
@@ -270,16 +396,12 @@ def main():
     phonon_flags = get_phonon_flags()
  
     output_file = "CONTROL.initial"
-    write_CONTROL(output_file,
-                  poscar["lattice_matrix"],
-                  poscar["elements"],
-                  poscar["atom_counts"],
-                  poscar["positions_direct"],
-                  ngrid,
-                  supercell_matrix,
-                  phonon_flags)
+    write_CONTROL(output_file, poscar["lattice_matrix"], poscar["elements"], poscar["atom_counts"],
+                  poscar["positions_direct"], ngrid, supercell_matrix, phonon_flags)
  
     print(f"Written: {output_file}")
-
+ 
+ 
 if __name__ == "__main__":
     main()
+ 
