@@ -469,7 +469,7 @@ def write_output(elements, distance_rms):
                     o.write(f"  {item[2]:>12.8f}  {item[3]:>12.8f}\n")
 
 def main():
-    """Main entry point: parse arguments, run pipeline, write outputs."""
+    """Parse arguments, calculate distance and IFC RMS, and write outputs."""
 
     if '-h' in argv or len(argv) != 3:
         usage()

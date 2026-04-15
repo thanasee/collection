@@ -246,14 +246,7 @@ def write_dat(filename, rows, display=False):
         print("")
 
 def main():
-    """Main entry point: orchestrate file reading, data collection, and output.
-
-    Workflow:
-        1. Parse command-line arguments.
-        2. Discover and sort kappa HDF5 files in the current directory.
-        3. For each file, read data, validate, select temperature, and collect rows.
-        4. Write collected data to .dat files; display selected types to stdout.
-    """
+    """Parses arguments, sort kappa HDF5 files, and write outputs."""
     if '-h' in argv or len(argv) != 1:
         usage()
 

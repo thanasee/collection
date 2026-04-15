@@ -112,8 +112,7 @@ def write_err(err_lines, filename="ERR.dat"):
 
 def main():
     """
-    Main entry point. Parses arguments, reads the ML_LOGFILE,
-    extracts BEEF and ERR data, and writes output files.
+    Parses arguments, reads the ML_LOGFILE, extracts BEEF and ERR data, and writes output files.
     """
     if '-h' in argv or len(argv) != 2:
         usage()

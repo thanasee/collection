@@ -672,7 +672,7 @@ def write_selected(flags, labels):
             o.write(f"{i + 1:5}   {labels[i]}    {flags[i, 0]}  {flags[i, 1]}  {flags[i, 2]}\n")
 
 def main():
-    """Entry point: parse arguments, run the fix workflow, and write outputs."""
+    """Parse arguments, fix selected atoms, and write outputs."""
     
     if '-h' in argv or '--help' in argv or len(argv) != 3:
         usage()

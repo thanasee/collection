@@ -369,32 +369,18 @@ def write_POSCAR(filepath, lattice_matrix, elements, atom_counts,
                         f"   {label:>6s}\n")
 
 def main():
-    """Entry point for vaspReformat.py.
-
-    Parses command-line arguments, reads the input POSCAR, resolves element
-    ordering, generates atom labels, and writes the reformatted VASP5 POSCAR.
+    """Parses command-line arguments and writes the reformatted VASP5 POSCAR.
     """
     if '-h' in argv or '--help' in argv or len(argv) != 3:
         usage()
     
     unformat = read_POSCAR(argv[1])
-    mapping = mapping_elements(unformat["elements"],
-                               unformat["atom_counts"],
-                               unformat["positions_cartesian"],
-                               unformat["positions_direct"],
-                               unformat["species"],
-                               unformat["selective_dynamics"],
+    mapping = mapping_elements(unformat["elements"], unformat["atom_counts"], unformat["positions_cartesian"],
+                               unformat["positions_direct"], unformat["species"], unformat["selective_dynamics"],
                                unformat["flags"])
-    labels = define_labels(mapping["elements"],
-                           mapping["atom_counts"])
-    write_POSCAR(argv[2],
-                 unformat["lattice_matrix"],
-                 mapping["elements"],
-                 mapping["atom_counts"],
-                 mapping["positions_direct"],
-                 unformat["selective_dynamics"],
-                 mapping["flags"],
-                 labels)
+    labels = define_labels(mapping["elements"], mapping["atom_counts"])
+    write_POSCAR(argv[2], unformat["lattice_matrix"], mapping["elements"], mapping["atom_counts"],
+                 mapping["positions_direct"], unformat["selective_dynamics"], mapping["flags"], labels)
 
 if __name__ == "__main__":
     main()

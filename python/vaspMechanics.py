@@ -620,7 +620,7 @@ def run_3d(structure, elastic_coef):
     print_and_write_mechanical_properties_3d(props)
 
 def main():
-    """Main entry point: parse arguments, read inputs, and dispatch to 2D or 3D analysis."""
+    """Parse arguments, read inputs, and dispatch to 2D or 3D analysis."""
     if '-h' in argv or len(argv) != 3:
         usage()
     

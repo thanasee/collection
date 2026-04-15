@@ -740,40 +740,9 @@ Input the direction index to fix (1 to 3):
             print("ERROR! Directions must be between 1 and 3. Try again.")
 
 def main():
-    """Entry point for vaspAdsorb.py — prepare a POSCAR for adsorption calculations.
-
-    Orchestrates the full workflow in the following order:
-
-    1. Parse command-line arguments; print usage and exit if invalid.
-    2. Read the substrate and adsorbent POSCAR files via read_POSCAR().
-    3. Resolve Selective Dynamics flags — pad missing flags with all-'T' arrays
-       if only one of the two input files has Selective Dynamics enabled.
-    4. Prompt the user for the number of adsorbent copies and the vertical
-       separation distance (Å).
-    5. Dispatch to place_ontop() or place_around() based on the user's choice
-       of placement method.
-    6. Assemble the full combined structure (substrate + placed adsorbents).
-    7. If neither input file had Selective Dynamics, optionally prompt the user
-       to define fixed atoms and directions via selection_atoms() and
-       select_direction().
-    8. Convert the combined Cartesian positions to fractional coordinates via
-       cartesian_to_direct().
-    9. Resolve any duplicate element blocks and reorder atoms canonically via
-       mapping_elements().
-    10. Generate per-atom comment labels via define_labels().
-    11. Write the final POSCAR to the output file via write_POSCAR().
-    12. Print a summary table showing the atom counts per element broken down
-        by substrate, adsorbent, and total.
-
-    Command-line arguments
-    ----------------------
-    argv[1] : str — path to the substrate POSCAR file
-    argv[2] : str — path to the adsorbent POSCAR file
-    argv[3] : str — path for the output POSCAR file
-
-    Exits with code 0 if '-h' or '--help' is passed, or if argument count != 4.
-    Exits with code 1 on any file-not-found or invalid-input error encountered
-    in the called functions.
+    """
+    Parse arguments, define distance and number of adsorbent, select method to place adsorbents,
+    write output, and display number of atoms per element.
     """
 
     if os.environ.get('USER') == 'nchotsis':

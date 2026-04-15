@@ -706,7 +706,7 @@ def write_variant_per_temperature(temp_dir, kappa_input_file, tag_freq, tag_mfp,
 
 
 def main():
-    """Main entry point: read HDF5 inputs, compute derived quantities, write all output files."""
+    """Read HDF5 inputs, compute derived quantities, and write all output files."""
     if '-h' in argv or len(argv) < 2 or len(argv) > 3:
         usage()
 

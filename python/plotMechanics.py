@@ -378,16 +378,7 @@ def configure_polar_axis(axp, sub_y_labels, ymax):
  
 def main():
     """
-    Entry point: orchestrate input, plotting, and file saving.
- 
-    Workflow:
-    1. Validate command-line arguments; show usage if needed.
-    2. Ask the user to select a mechanical property.
-    3. Set up the figure with Cartesian and polar axes.
-    4. For each input file: load data, ask for a material label,
-       report the largest value, and plot the curve.
-    5. Ask for axis scale parameters (ymax, step).
-    6. Configure both axes and save the figure as a PNG.
+    Parse arguments, ask data types, ask configuration of figure, plot data values, and save output figure.
     """
     if '-h' in argv or len(argv) < 2 or len(argv) > 7:
         usage()

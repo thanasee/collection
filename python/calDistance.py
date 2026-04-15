@@ -646,7 +646,7 @@ def z_distance(total_atoms, positions, species):
     print(f"Distance along z-axis is {distance:>12.8f} Angstrom.")
 
 def main():
-    """Entry point: parse arguments, read POSCAR, dispatch to selected method."""
+    """Parse arguments, read POSCAR, calculate distance by selected method, write output files."""
 
     if '-h' in argv or len(argv) != 2:
         usage()

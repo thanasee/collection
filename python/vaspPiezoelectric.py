@@ -673,22 +673,7 @@ def run_3d(piezostress_coef, elastic_coef):
     write_piezostrain_3d(piezostrain_3d)
 
 def main():
-    """Main entry point for the vaspPiezoelectric script.
- 
-    Parses command-line arguments, reads the crystal structure and OUTCAR
-    file, obtains the elastic tensor via the fallback chain, prompts the user
-    to select 2D or 3D material type, and dispatches to the appropriate
-    calculation pipeline (run_2d or run_3d).
- 
-    Output files produced
-    ---------------------
-    Elastic.dat
-        Elastic stiffness tensor (N/m for 2D, GPa for 3D).
-    Piezoelectric_Stress.dat
-        Piezoelectric stress tensor (10**-10 C/m for 2D, C/m**2 for 3D).
-    Piezoelectric_Strain.dat
-        Piezoelectric strain tensor (pm/V for both 2D and 3D).
-    """
+    """Parse arguments, read inputs, and dispatch to 2D or 3D analysis."""
 
     if '-h' in argv or len(argv) != 3:
         usage()

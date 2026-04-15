@@ -176,12 +176,7 @@ def process_ifc(order, dft_data, mlff_data):
 
 def main():
     """
-    Entry point. Parses arguments, validates inputs, and runs the IFC comparison pipeline:
-        1. Validate CLI arguments and input file paths.
-        2. Read IFC data from both HDF5 files.
-        3. Detect and validate IFC order consistency between files.
-        4. Validate array shape compatibility.
-        5. Compute residuals, print summary, and write output .dat file.
+    Parses arguments, detect IFC oreder, compare IFC, and write outputs
     """
     if '-h' in argv or len(argv) < 2 or len(argv) > 3:
         usage()

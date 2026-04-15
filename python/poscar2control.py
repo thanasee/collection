@@ -381,8 +381,7 @@ def write_CONTROL(filepath, lattice_matrix, elements, atom_counts, positions_dir
  
 def main():
     """
-    Main entry point. Parses arguments, reads the POSCAR, collects user
-    inputs interactively, and writes the CONTROL file.
+    Parses arguments, reads the POSCAR, collects user inputs interactively, and writes the CONTROL file.
     """
     if '-h' in argv or '--help' in argv or len(argv) != 2:
         usage()

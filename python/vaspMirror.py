@@ -410,17 +410,8 @@ Choice of reflection plane
     return new_positions_cartesian
 
 def main():
-    """Entry point for vaspMirror.py.
-
-    Workflow
-    --------
-    1. Parse command-line arguments; print usage and exit if invalid.
-    2. Read the input POSCAR file via read_POSCAR().
-    3. Reflect atomic positions across the user-chosen plane via reflect().
-    4. Convert reflected Cartesian coordinates to Direct via cartesian_to_direct().
-    5. Re-order atoms into contiguous element blocks via mapping_elements().
-    6. Generate per-atom labels via define_labels().
-    7. Write the output POSCAR file via write_POSCAR().
+    """
+    Parse arguments, reflect atom across the selected plane, write output.
     """
     if '-h' in argv or '--help' in argv or len(argv) != 3:
         usage()

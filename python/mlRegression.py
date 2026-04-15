@@ -323,7 +323,7 @@ def write_errors(metrics, filename='ERROR.dat'):
         print(line)
 
 def main():
-    """Main entry point: parse, validate, compute, and write all outputs."""
+    """Parse arguments, collect data types, compute statistic variables, and write all outputs."""
     if '-h' in argv or len(argv) != 2:
         usage()
 
