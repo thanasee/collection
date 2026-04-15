@@ -1,5 +1,5 @@
---- main.F	2023-11-21 23:15:30.960872283 -0500
-+++ main.F	2023-11-21 23:14:07.126899841 -0500
+--- src/main.F	2023-11-21 23:15:30.960872283 -0500
++++ src/main.F	2023-11-21 23:14:07.126899841 -0500
 @@ -208,6 +208,8 @@
        USE minimax_struct, ONLY : imag_grid_handle, MINIMAX_INTEGRATION_TEST
        USE minimax, ONLY : SET_IMAG_GRID_HANDLE, DEALLOCATE_IMAG_GRID_HANDLE
@@ -463,8 +463,8 @@
  !-----------------------------------------------------------------------
  !  set DYN%D2C to forces in cartesian coordinates multiplied by FACT
  !  FACT is determined from timestep in a way, that a stable timestep
---- pot.F	2023-11-21 23:15:33.290955302 -0500
-+++ pot.F	2023-11-21 23:14:11.726059811 -0500
+--- src/pot.F	2023-11-21 23:15:33.290955302 -0500
++++ src/pot.F	2023-11-21 23:14:11.726059811 -0500
 @@ -363,7 +363,9 @@
  !-----------------------------------------------------------------------
  ! add the dielectric corrections to CVTOT and the energy
@@ -476,8 +476,8 @@
  ! solvation__
  !-----------------------------------------------------------------------
  !  add local pseudopotential potential
---- reader.F	2023-11-21 23:15:35.886047763 -0500
-+++ reader.F	2023-11-21 23:14:16.141213385 -0500
+--- src/reader.F	2023-11-21 23:15:35.886047763 -0500
++++ src/reader.F	2023-11-21 23:14:16.141213385 -0500
 @@ -25,6 +25,8 @@
  #ifdef libbeef
       &       ,LBEEFENS,LBEEFBAS &
@@ -536,8 +536,8 @@
  #ifdef libbeef
  ! read in flag LBEEFENS 
        LBEEFENS=.FALSE.
---- solvation.F	2023-11-21 23:15:38.600144464 -0500
-+++ solvation.F	2023-11-21 23:14:25.030527744 -0500
+--- src/solvation.F	2023-11-21 23:15:38.600144464 -0500
++++ src/solvation.F	2023-11-21 23:14:25.030527744 -0500
 @@ -1778,6 +1778,10 @@
   PUBLIC :: GET_FERMISHIFT
   ! vaclevel
