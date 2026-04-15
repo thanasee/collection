@@ -470,10 +470,10 @@ def compute_mechanical_properties_3d(elastic_3d, structure):
     total_atoms = len(structure)
     
     # VRH averages
-    bulk_voigt  = (C11 + C22 + C33 + 2 * (C12 + C23 + C13)) / 9
-    shear_voigt = (C11 + C22 + C33 - C12 - C23 - C13 + 3 * (C44 + C55 + C66)) / 15
-    bulk_reuss  = 1 / (S11 + S22 + S33 + 2 * (S12 + S23 + S13))
-    shear_reuss = 15 / (4 * (S11 + S22 + S33 - S12 - S23 - S13) + 3 * (S44 + S55 + S66))
+    bulk_voigt    = (C11 + C22 + C33 + 2 * (C12 + C23 + C13)) / 9
+    shear_voigt   = (C11 + C22 + C33 - C12 - C23 - C13 + 3 * (C44 + C55 + C66)) / 15
+    bulk_reuss    = 1 / (S11 + S22 + S33 + 2 * (S12 + S23 + S13))
+    shear_reuss   = 15 / (4 * (S11 + S22 + S33 - S12 - S23 - S13) + 3 * (S44 + S55 + S66))
     bulk_modulus  = (bulk_voigt + bulk_reuss) / 2
     shear_modulus = (shear_voigt + shear_reuss) / 2
     
@@ -513,7 +513,8 @@ def compute_mechanical_properties_3d(elastic_3d, structure):
        'pugh_ratio': pugh_ratio, 'v_m': v_m, 'debye_temperature': debye_temperature,
        'universal_anisotropy': universal_anisotropy,
        'bulk_anisotropy': bulk_anisotropy, 'shear_anisotropy': shear_anisotropy,
-       'anisotropy_1': anisotropy_1, 'anisotropy_2': anisotropy_2, 'anisotropy_3': anisotropy_3}
+       'anisotropy_1': anisotropy_1, 'anisotropy_2': anisotropy_2, 'anisotropy_3': anisotropy_3
+       }
 
 def print_and_write_mechanical_properties_3d(props):
     """Print and write mechanical properties and anisotropy indices to output files.
@@ -528,16 +529,16 @@ def print_and_write_mechanical_properties_3d(props):
         Dictionary of mechanical properties as returned by
         compute_mechanical_properties_3d().
     """
-    bv = props['bulk_voigt']; br = props['bulk_reuss']
-    gv = props['shear_voigt']; gr = props['shear_reuss']
-    B = props['bulk_modulus']; G = props['shear_modulus']
-    E = props['young_modulus']; v = props['poisson_ratio']
-    M = props['pwave_modulus']; L = props['lame_parameter']
-    P = props['pugh_ratio']; vm = props['v_m']
-    tD = props['debye_temperature']
-    A_B = props['bulk_anisotropy']; A_G = props['shear_anisotropy']
+    bv  = props['bulk_voigt']          ; br = props['bulk_reuss']
+    gv  = props['shear_voigt']         ; gr = props['shear_reuss']
+    B   = props['bulk_modulus']        ; G = props['shear_modulus']
+    E   = props['young_modulus']       ; v = props['poisson_ratio']
+    M   = props['pwave_modulus']       ; L = props['lame_parameter']
+    P   = props['pugh_ratio']          ; vm = props['v_m']
+    tD  = props['debye_temperature']
+    A_B = props['bulk_anisotropy']     ; A_G = props['shear_anisotropy']
     A_U = props['universal_anisotropy']
-    A1 = props['anisotropy_1']; A2 = props['anisotropy_2']; A3 = props['anisotropy_3']
+    A1  = props['anisotropy_1']        ; A2 = props['anisotropy_2']; A3 = props['anisotropy_3']
     
     mech_str = (
         f"\n# Mechanical properties\n"
