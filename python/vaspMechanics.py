@@ -8,6 +8,7 @@ from ase.spacegroup.symmetrize import check_symmetry
 from scipy.constants import Avogadro, h, k
 
 def usage():
+    """Print usage information and exit."""
     
     text = """
 Usage: vaspMechanics.py <POSCAR input> <OUTCAR input>
@@ -23,6 +24,18 @@ This script was developed by Thanasee Thanasarnsurapong.
     exit(0)
 
 def read_structure(poscar_file):
+    """Read atomic structure from a POSCAR file using ASE.
+ 
+    Parameters
+    ----------
+    poscar_file : str
+        Path to the POSCAR file.
+ 
+    Returns
+    -------
+    structure : ase.Atoms
+        ASE Atoms object containing the crystal structure.
+    """
     
     if not os.path.exists(poscar_file):
         print(f"ERROR!\nFile: {poscar_file} does not exist.")
@@ -31,6 +44,22 @@ def read_structure(poscar_file):
     return read(poscar_file)
 
 def read_elastic_tensor(outcar_file):
+    """Read and parse the elastic tensor from a VASP OUTCAR file.
+ 
+    Extracts the 'TOTAL ELASTIC MODULI (kBar)' section, converts units
+    from kBar to GPa, and reorders indices from VASP convention
+    (xx, yy, zz, xy, yz, xz) to Voigt notation (11, 22, 33, 44, 55, 66).
+ 
+    Parameters
+    ----------
+    outcar_file : str
+        Path to the OUTCAR file.
+ 
+    Returns
+    -------
+    elastic_coef : np.ndarray, shape (6, 6)
+        Elastic tensor in Voigt notation (GPa).
+    """
     
     if not os.path.exists(outcar_file):
         print(f"ERROR!\nFile: {outcar_file} does not exist.")
@@ -59,6 +88,21 @@ def read_elastic_tensor(outcar_file):
     return elastic_coef
 
 def get_2d_lattice_type(structure):
+    """Determine the 2D lattice type from cell parameters.
+ 
+    Classifies the in-plane lattice as square, rectangular, hexagonal,
+    or oblique based on lattice lengths a, b and the angle gamma.
+ 
+    Parameters
+    ----------
+    structure : ase.Atoms
+        ASE Atoms object containing the crystal structure.
+ 
+    Returns
+    -------
+    lattice_type : str
+        One of 'square', 'rectangular', 'hexagonal', or 'oblique'.
+    """
     
     length_a = structure.cell.cellpar()[0]
     length_b = structure.cell.cellpar()[1]
@@ -72,6 +116,31 @@ def get_2d_lattice_type(structure):
         return 'oblique'
 
 def compute_elastic_2d(structure, elastic_coef):
+    """Extract the 2D elastic tensor from the 3D VASP elastic tensor.
+ 
+    Projects the 3D elastic tensor onto the 2D in-plane subspace by
+    multiplying by the out-of-plane thickness (factor_2d), converting
+    units from GPa to N/m. Off-diagonal terms C16 and C26 are set to
+    zero for non-oblique lattices as required by 2D lattice symmetry.
+ 
+    Parameters
+    ----------
+    structure : ase.Atoms
+        ASE Atoms object containing the crystal structure.
+    elastic_coef : np.ndarray, shape (6, 6)
+        3D elastic tensor in Voigt notation (GPa).
+ 
+    Returns
+    -------
+    elastic_2d : np.ndarray, shape (3, 3)
+        2D elastic tensor in Voigt notation (N/m).
+    C11, C22, C12, C66 : float
+        In-plane elastic constants (N/m).
+    C16, C26 : float
+        Off-diagonal elastic constants (N/m); zero for non-oblique lattices.
+    factor_2d : float
+        Out-of-plane thickness in nm, used for GPa*Angstrom to N/m conversion.
+    """
     
     vector_a = structure.cell[0]
     vector_b = structure.cell[1]
@@ -96,12 +165,14 @@ def compute_elastic_2d(structure, elastic_coef):
     
     return elastic_2d, C11, C22, C12, C66, C16, C26, factor_2d
 
-def write_elastic_2d(C11,
-                     C22,
-                     C12,
-                     C66,
-                     C16,
-                     C26):
+def write_elastic_2d(C11, C22, C12, C66, C16, C26):
+    """Print and write the 2D elastic tensor to Elastic.dat.
+ 
+    Parameters
+    ----------
+    C11, C22, C12, C66, C16, C26 : float
+        2D elastic constants (N/m).
+    """
     
     header = (
         "# Elastic tensor(N/m)\n"
@@ -126,8 +197,19 @@ def write_elastic_2d(C11,
     print(f"   {C16:>11.4f} {C26:>11.4f} {C66:>11.4f}\n")
 
 
-def check_stability_2d(elastic_2d,
-                       factor_2d):
+def check_stability_2d(elastic_2d, factor_2d):
+    """Check mechanical stability of a 2D material via eigenvalue criterion.
+ 
+    A 2D material is mechanically stable if all eigenvalues of the
+    2D elastic tensor are positive. Exits if the material is unstable.
+ 
+    Parameters
+    ----------
+    elastic_2d : np.ndarray, shape (3, 3)
+        2D elastic tensor in Voigt notation (N/m).
+    factor_2d : float
+        Out-of-plane thickness (nm), used to set the eigenvalue threshold.
+    """
     if np.all(np.linalg.eigvalsh(elastic_2d) > 1e-5 * factor_2d):
         print("This material is mechanically stable.")
     else:
@@ -135,6 +217,28 @@ def check_stability_2d(elastic_2d,
         exit(0)
 
 def compute_directional_properties_2d(elastic_2d):
+    """Compute angle-dependent mechanical properties of a 2D material.
+ 
+    Calculates Young's modulus, Poisson's ratio, and shear modulus as
+    functions of in-plane angle (0 to 360 degrees) using the compliance
+    tensor rotation formulas.
+ 
+    Parameters
+    ----------
+    elastic_2d : np.ndarray, shape (3, 3)
+        2D elastic tensor in Voigt notation (N/m).
+ 
+    Returns
+    -------
+    degrees : np.ndarray
+        Angles from 0 to 360 degrees in 0.1 degree steps.
+    young_modulus : np.ndarray
+        Young's modulus at each angle (N/m).
+    poisson_ratio : np.ndarray
+        Poisson's ratio at each angle (dimensionless).
+    shear_modulus : np.ndarray
+        Shear modulus at each angle (N/m).
+    """
     degrees = np.arange(0, 360.0, 0.1)
     radians = np.deg2rad(degrees)
     sin = np.sin(radians)
@@ -168,10 +272,24 @@ def compute_directional_properties_2d(elastic_2d):
     
     return degrees, young_modulus, poisson_ratio, shear_modulus
 
-def write_directional_properties_2d(degrees,
-                                    young_modulus,
-                                    poisson_ratio,
-                                    shear_modulus):
+def write_directional_properties_2d(degrees, young_modulus, poisson_ratio, shear_modulus):
+    """Write angle-dependent mechanical properties to output files.
+ 
+    Writes Young's modulus to Young.dat, Poisson's ratio to Poisson.dat
+    (with an extra |v| column if any value is negative), and shear
+    modulus to Shear.dat.
+ 
+    Parameters
+    ----------
+    degrees : np.ndarray
+        Angles from 0 to 360 degrees.
+    young_modulus : np.ndarray
+        Young's modulus at each angle (N/m).
+    poisson_ratio : np.ndarray
+        Poisson's ratio at each angle (dimensionless).
+    shear_modulus : np.ndarray
+        Shear modulus at each angle (N/m).
+    """
     
     with open('Young.dat', 'w') as o:
         o.write("# Young's Modulus\n")
@@ -197,6 +315,19 @@ def write_directional_properties_2d(degrees,
             o.write(f" {dg:>6.1f}      {g:>12.8f}\n")
 
 def run_2d(structure, elastic_coef):
+    """Run the full 2D mechanical analysis pipeline.
+ 
+    Computes the 2D elastic tensor, writes it to file, checks mechanical
+    stability, then computes and writes angle-dependent Young's modulus,
+    Poisson's ratio, and shear modulus.
+ 
+    Parameters
+    ----------
+    structure : ase.Atoms
+        ASE Atoms object containing the crystal structure.
+    elastic_coef : np.ndarray, shape (6, 6)
+        3D elastic tensor in Voigt notation (GPa).
+    """
     
     elastic_2d, C11, C22, C12, C66, C16, C26, factor_2d = compute_elastic_2d(structure, elastic_coef)
     write_elastic_2d(C11, C22, C12, C66, C16, C26)
@@ -205,6 +336,24 @@ def run_2d(structure, elastic_coef):
     write_directional_properties_2d(degrees, young_modulus, poisson_ratio, shear_modulus)
 
 def get_crystal_system(structure):
+    """Determine the crystal system from the spacegroup number.
+ 
+    Uses ASE's check_symmetry to obtain the spacegroup number and maps
+    it to one of the seven crystal systems (with Tetragonal and Trigonal
+    each split into two groups).
+ 
+    Parameters
+    ----------
+    structure : ase.Atoms
+        ASE Atoms object containing the crystal structure.
+ 
+    Returns
+    -------
+    crystal_system : str
+        Crystal system name, one of: 'Cubic', 'Hexagonal', 'Trigonal I',
+        'Trigonal II', 'Tetragonal I', 'Tetragonal II', 'Orthorhombic',
+        'Monoclinic', or 'Triclinic'.
+    """
     spacegroup = check_symmetry(structure).number
     
     if 195 <= spacegroup <= 230:
@@ -227,6 +376,13 @@ def get_crystal_system(structure):
         return 'Triclinic'
 
 def write_elastic_3d(elastic_3d):
+    """Print and write the full 3D elastic tensor to Elastic.dat.
+ 
+    Parameters
+    ----------
+    elastic_3d : np.ndarray, shape (6, 6)
+        3D elastic tensor in Voigt notation (GPa).
+    """
     C = elastic_3d  # shorthand for formatting
     
     header = (
@@ -257,6 +413,16 @@ def write_elastic_3d(elastic_3d):
     print()
 
 def check_stability_3d(elastic_3d):
+    """Check mechanical stability of a 3D material via eigenvalue criterion.
+ 
+    A 3D material is mechanically stable if all eigenvalues of the
+    elastic tensor are positive. Exits if the material is unstable.
+ 
+    Parameters
+    ----------
+    elastic_3d : np.ndarray, shape (6, 6)
+        3D elastic tensor in Voigt notation (GPa).
+    """
     if np.all(np.linalg.eigvalsh(elastic_3d) > 1e-5):
         print("This material is mechanically stable.")
     else:
@@ -264,6 +430,30 @@ def check_stability_3d(elastic_3d):
         exit(0)
 
 def compute_mechanical_properties_3d(elastic_3d, structure):
+    """Compute bulk mechanical properties of a 3D material.
+ 
+    Calculates Voigt, Reuss, and Hill (VRH) averages for bulk and shear
+    moduli, derived elastic properties (Young's modulus, Poisson's ratio,
+    P-wave modulus, Lame parameter, Pugh's ratio), anisotropy indices,
+    sound velocities, and the Debye temperature.
+ 
+    Parameters
+    ----------
+    elastic_3d : np.ndarray, shape (6, 6)
+        3D elastic tensor in Voigt notation (GPa).
+    structure : ase.Atoms
+        ASE Atoms object, used to obtain mass, volume, and atom count.
+ 
+    Returns
+    -------
+    props : dict
+        Dictionary containing all computed mechanical properties:
+        bulk_voigt, bulk_reuss, shear_voigt, shear_reuss,
+        bulk_modulus, shear_modulus, young_modulus, poisson_ratio,
+        pwave_modulus, lame_parameter, pugh_ratio, v_m,
+        debye_temperature, universal_anisotropy, bulk_anisotropy,
+        shear_anisotropy, anisotropy_1, anisotropy_2, anisotropy_3.
+    """
     C11 = elastic_3d[0, 0]; C22 = elastic_3d[1, 1]; C33 = elastic_3d[2, 2]
     C12 = elastic_3d[0, 1]; C13 = elastic_3d[0, 2]; C23 = elastic_3d[1, 2]
     C44 = elastic_3d[3, 3]; C55 = elastic_3d[4, 4]; C66 = elastic_3d[5, 5]
@@ -326,6 +516,18 @@ def compute_mechanical_properties_3d(elastic_3d, structure):
        'anisotropy_1': anisotropy_1, 'anisotropy_2': anisotropy_2, 'anisotropy_3': anisotropy_3}
 
 def print_and_write_mechanical_properties_3d(props):
+    """Print and write mechanical properties and anisotropy indices to output files.
+ 
+    Prints all properties to stdout and writes them to two files:
+    Mechanics.dat (bulk mechanical properties) and Anisotropy.dat
+    (anisotropy indices).
+ 
+    Parameters
+    ----------
+    props : dict
+        Dictionary of mechanical properties as returned by
+        compute_mechanical_properties_3d().
+    """
     bv = props['bulk_voigt']; br = props['bulk_reuss']
     gv = props['shear_voigt']; gr = props['shear_reuss']
     B = props['bulk_modulus']; G = props['shear_modulus']
@@ -392,6 +594,19 @@ def print_and_write_mechanical_properties_3d(props):
         o.write(f"(001) Planar Shear Anisotropy (A_3): {A3:>10.4f}\n")
 
 def run_3d(structure, elastic_coef):
+    """Run the full 3D mechanical analysis pipeline.
+ 
+    Writes the elastic tensor to file, identifies the crystal system,
+    checks mechanical stability, then computes and writes all bulk
+    mechanical properties and anisotropy indices.
+ 
+    Parameters
+    ----------
+    structure : ase.Atoms
+        ASE Atoms object containing the crystal structure.
+    elastic_coef : np.ndarray, shape (6, 6)
+        3D elastic tensor in Voigt notation (GPa).
+    """
     elastic_3d = np.copy(elastic_coef)
     write_elastic_3d(elastic_3d)
     
@@ -404,6 +619,7 @@ def run_3d(structure, elastic_coef):
     print_and_write_mechanical_properties_3d(props)
 
 def main():
+    """Main entry point: parse arguments, read inputs, and dispatch to 2D or 3D analysis."""
     if '-h' in argv or len(argv) != 3:
         usage()
     
