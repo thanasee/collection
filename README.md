@@ -1,5 +1,4 @@
-# vasp-tool
-A collection of Python scripts and patch files:
+# A collection of Python scripts and patch files:
 1. Python scripts
   - Extract and analyze the variables of thermal transport properties in the lattice part from the HDF5 output files of Phono3py
   - Calculate structural properties (e.g., distance) from structure files in VASP format
