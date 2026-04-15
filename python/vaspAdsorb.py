@@ -5,6 +5,7 @@ import os
 import numpy as np
 
 def usage():
+    """Print usage information and exit."""
     
     text = """
 Usage: vaspAdsorb.py <substrate input> <adsorbent input> <output>
@@ -22,14 +23,41 @@ and developed by Thanasee Thanasarnsurapong.
     exit(0)
 
 def read_POSCAR(filepath):
-    
+    """Read a VASP POSCAR file and return its contents as a dictionary.
+
+    Supports both VASP4 (no element line) and VASP5 (with element line) formats,
+    scalar and negative (volume-based) scaling factors, a 3-component scaling
+    vector, Selective Dynamics, and both Direct and Cartesian coordinate modes.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to the POSCAR file to read.
+
+    Returns
+    -------
+    dict with keys:
+        lattice_matrix      : np.ndarray, shape (3, 3)  — lattice vectors in Å
+        elements            : list[str]                 — element symbols
+        atom_counts         : list[int]                 — number of atoms per element
+        total_atoms         : int                       — total number of atoms
+        positions_cartesian : np.ndarray, shape (N, 3)  — Cartesian coordinates in Å
+        positions_direct    : np.ndarray, shape (N, 3)  — fractional coordinates
+        species             : list[str]                 — element symbol per atom
+        selective_dynamics  : bool                      — whether Selective Dynamics is present
+        flags               : np.ndarray or None        — T/F flags per atom, or None
+    """
+
     if not os.path.exists(filepath):
         print(f"ERROR!\nFile: {filepath} does not exist.")
         exit(1)
-    
+
     with open(filepath, 'r') as poscar:
         lines = poscar.readlines()
-    
+
+    # Parse the scaling factor (line 2):
+    # - 1 value  : uniform scalar; negative means target volume in Å**3
+    # - 3 values : per-axis scale applied row-wise to the lattice matrix
     if len(lines[1].split()) == 1:
         raw_scale = float(lines[1])
         raw_lattice_matrix = np.array([[float(x) for x in line.split()]
@@ -50,7 +78,9 @@ def read_POSCAR(filepath):
     else:
         print("ERROR! The scaling factor must be 1 or 3 components.")
         exit(1)
-    
+
+    # Detect VASP4 vs VASP5 format by checking whether line 6 starts with a number.
+    # VASP4 has no element-symbol line, so the user is prompted for species names.
     elements = []
     is_number = lines[5].split()[0].isdecimal()
     if is_number:
@@ -67,7 +97,8 @@ def read_POSCAR(filepath):
         selective_dynamics = lines[6].lower().startswith('s')
         position_start = 8 if selective_dynamics else 7
     else:
-        # VASP5 format: element symbols present
+        # VASP5 format: element symbols present.
+        # Strip potential PAW/GGA suffixes such as '_pv' or '/GGA'.
         raw_elements = lines[5].split()
         for name in raw_elements:
             elements.append(name.split('/')[0].split('_')[0])
@@ -82,54 +113,96 @@ def read_POSCAR(filepath):
     positions = np.array([[float(x) for x in lines[i].split()[:3]]
                           for i in range(position_start, position_stop)])
 
+    # Build a per-atom species list (e.g. ['Mo', 'Mo', 'S', 'S', 'S'])
     species = [x for i, x in enumerate(elements)
                for _ in range(atom_counts[i])]
 
+    # Read Selective Dynamics T/F flags if present
     flags = None
     if selective_dynamics:
         flags = np.array([[x for x in lines[i].split()[3:6]]
                           for i in range(position_start, position_stop)])
 
-    # Detect coordinate type
+    # Convert coordinates to both Direct and Cartesian representations
     is_direct = lines[position_start - 1].strip().lower().startswith('d')
     if is_direct:
-        # If direct coordinate then compute cartesian coordinate
         positions_direct = positions % 1.0
         positions_cartesian = direct_to_cartesian(lattice_matrix, positions_direct)
     else:
-        # If cartesian coordinate then direct coordinate
         positions_cartesian = positions * scale
         positions_direct = cartesian_to_direct(lattice_matrix, positions_cartesian)
-    
-    return {"lattice_matrix": lattice_matrix,
-            "elements": elements,
-            "atom_counts": atom_counts,
-            "total_atoms": total_atoms,
-            "positions_cartesian": positions_cartesian,
-            "positions_direct": positions_direct,
-            "species": species,
-            "selective_dynamics": selective_dynamics,
-            "flags": flags if selective_dynamics else None}
 
-def direct_to_cartesian(lattice_matrix,
-                        positions_direct):
-    
+    return {"lattice_matrix":     lattice_matrix,
+            "elements":           elements,
+            "atom_counts":        atom_counts,
+            "total_atoms":        total_atoms,
+            "positions_cartesian": positions_cartesian,
+            "positions_direct":   positions_direct,
+            "species":            species,
+            "selective_dynamics": selective_dynamics,
+            "flags":              flags if selective_dynamics else None}
+
+
+def direct_to_cartesian(lattice_matrix, positions_direct):
+    """Convert fractional (Direct) coordinates to Cartesian coordinates.
+
+    Uses the relation:  r_cart = r_direct @ lattice_matrix
+
+    Parameters
+    ----------
+    lattice_matrix    : np.ndarray, shape (3, 3) — row vectors of the lattice in Å
+    positions_direct  : np.ndarray, shape (N, 3) — fractional coordinates
+
+    Returns
+    -------
+    positions_cartesian : np.ndarray, shape (N, 3) — Cartesian coordinates in Å
+    """
+
     positions = positions_direct % 1.0
     positions_cartesian = np.dot(positions, lattice_matrix)
-    
+
     return positions_cartesian
 
-def cartesian_to_direct(lattice_matrix,
-                        positions_cartesian):
-    
+
+def cartesian_to_direct(lattice_matrix, positions_cartesian):
+    """Convert Cartesian coordinates to fractional (Direct) coordinates.
+
+    Uses the relation:  r_direct = r_cart @ lattice_matrix⁻¹
+
+    Parameters
+    ----------
+    lattice_matrix      : np.ndarray, shape (3, 3) — row vectors of the lattice in Å
+    positions_cartesian : np.ndarray, shape (N, 3) — Cartesian coordinates in Å
+
+    Returns
+    -------
+    positions_direct : np.ndarray, shape (N, 3) — fractional coordinates in [0, 1)
+    """
+
     positions_direct = np.dot(positions_cartesian, np.linalg.inv(lattice_matrix)) % 1.0
-    
+
     return positions_direct
 
+
 def check_elements(elements):
-    
+    """Check for duplicate element symbols and prompt the user for a canonical order.
+
+    If duplicate symbols are found (e.g. ['Mo', 'S', 'Mo']), the user is asked
+    to specify the desired ordering of the unique species. An empty input accepts
+    the default order (first-occurrence order).
+
+    Parameters
+    ----------
+    elements : list[str] — element symbols as parsed from the POSCAR
+
+    Returns
+    -------
+    list[str] or None
+        The user-specified element order if duplicates were found, else None.
+    """
+
     unique_elements = list(dict.fromkeys(elements))
-     
+
     if len(elements) != len(unique_elements):
         print("\nFound duplicated elements in POSCAR!")
         print("Unique elements: [" + " ".join(unique_elements) + "]")
@@ -137,7 +210,7 @@ def check_elements(elements):
             sort_elements = input("Enter the desired element order (separate by space): ").split()
             if len(sort_elements) == 0:
                 print("Warning! Empty input — using default unique element order.")
-                sort_elements = unique_elements.copy()
+                return unique_elements.copy()
             if (len(sort_elements) == len(unique_elements) and
                     set(sort_elements) == set(unique_elements)):
                 return sort_elements
@@ -145,22 +218,46 @@ def check_elements(elements):
     else:
         return None
 
-def mapping_elements(elements,
-                     atom_counts,
-                     positions_cartesian,
-                     positions_direct,
-                     species,
-                     selective_dynamics,
-                     flags,
-                     sort_elements=None):
-    
+
+def mapping_elements(elements, atom_counts, positions_cartesian, positions_direct,
+                     species, selective_dynamics, flags, sort_elements=None):
+    """Re-order atoms so that each element block is contiguous and sorted canonically.
+
+    Groups atomic positions by element symbol, resolves any duplicate element
+    entries via check_elements(), and returns arrays sorted according to the
+    specified (or user-supplied) element order. This is required because some
+    POSCARs interleave atoms of the same species across multiple blocks.
+
+    Parameters
+    ----------
+    elements            : list[str]            — element symbols from POSCAR
+    atom_counts         : list[int]            — atoms per element block
+    positions_cartesian : np.ndarray (N, 3)    — Cartesian coordinates in Å
+    positions_direct    : np.ndarray (N, 3)    — fractional coordinates
+    species             : list[str]            — per-atom element labels
+    selective_dynamics  : bool                 — whether Selective Dynamics is used
+    flags               : np.ndarray or None   — per-atom T/F flags
+    sort_elements       : list[str] or None    — explicit element order (optional)
+
+    Returns
+    -------
+    dict with keys:
+        elements            : list[str]
+        atom_counts         : list[int]
+        positions_cartesian : np.ndarray (N, 3)
+        positions_direct    : np.ndarray (N, 3)
+        species             : list[str]
+        flags               : np.ndarray or None
+    """
+
     new_elements = elements.copy()
     new_atom_counts = atom_counts.copy()
     new_positions_cartesian = positions_cartesian.copy()
     new_positions_direct = positions_direct.copy()
     new_species = species.copy()
     new_flags = flags.copy() if selective_dynamics else None
-    
+
+    # Group positions and flags by element symbol
     elements_positions_cartesian = {}
     elements_positions_direct = {}
     elements_species = {}
@@ -177,11 +274,13 @@ def mapping_elements(elements,
             elements_flags.setdefault(element, []).extend(
                 new_flags[position_index:position_index + count])
         position_index += count
-     
+
+    # Resolve canonical element order (prompts user if duplicates exist)
     if sort_elements is None:
         sort_elements = check_elements(elements)
-    
-    if sort_elements is not None:     
+
+    # Rebuild arrays in the resolved order
+    if sort_elements is not None:
         sort_positions_cartesian = []
         sort_positions_direct = []
         sort_species = []
@@ -194,7 +293,7 @@ def mapping_elements(elements,
             if selective_dynamics:
                 sort_flags.extend(elements_flags[element])
             sort_atom_counts.append(len(elements_positions_direct[element]))
-     
+
         new_positions_cartesian = np.array(sort_positions_cartesian, dtype=float)
         new_positions_direct = np.array(sort_positions_direct, dtype=float)
         new_species = list(sort_species)
@@ -203,31 +302,58 @@ def mapping_elements(elements,
         new_atom_counts = sort_atom_counts
         new_elements = sort_elements
 
-    return {"elements": new_elements,
-            "atom_counts": new_atom_counts,
+    return {"elements":           new_elements,
+            "atom_counts":        new_atom_counts,
             "positions_cartesian": new_positions_cartesian,
-            "positions_direct": new_positions_direct,
-            "species": new_species,
-            "flags": new_flags if selective_dynamics else None}
+            "positions_direct":   new_positions_direct,
+            "species":            new_species,
+            "flags":              new_flags if selective_dynamics else None}
 
-def define_labels(elements,
-                  atom_counts):
-    
+
+def define_labels(elements, atom_counts):
+    """Generate per-atom labels used as comments in the POSCAR position block.
+
+    Labels take the form '<Symbol><index>' with the index zero-padded to the
+    width of the largest atom count plus one (e.g. 'Mo01', 'S003').
+
+    Parameters
+    ----------
+    elements    : list[str]  — element symbols in canonical order
+    atom_counts : list[int]  — number of atoms per element
+
+    Returns
+    -------
+    labels : list[str] — one label per atom in the same order as the position arrays
+    """
+
     digits = len(str(max(atom_counts))) + 1
-    labels = [f"{symbol}{str(counter).zfill(digits)}" for symbol, number in zip(elements, atom_counts)
+    labels = [f"{symbol}{str(counter).zfill(digits)}"
+              for symbol, number in zip(elements, atom_counts)
               for counter in range(1, number + 1)]
-    
+
     return labels
 
-def write_POSCAR(filepath,
-                 lattice_matrix,
-                 elements,
-                 atom_counts,
-                 positions_direct,
-                 selective_dynamics,
-                 flags,
-                 labels):
-    
+
+def write_POSCAR(filepath, lattice_matrix, elements, atom_counts,
+                 positions_direct, selective_dynamics, flags, labels):
+    """Write a VASP5-format POSCAR file with Direct coordinates.
+
+    The scale factor is always written as 1.0 because the lattice vectors
+    are already stored in absolute Å units. Atom labels are appended as
+    inline comments after each position line for readability.
+
+    Parameters
+    ----------
+    filepath           : str
+    lattice_matrix     : np.ndarray (3, 3)  — lattice vectors in Å
+    elements           : list[str]          — element symbols in canonical order
+    atom_counts        : list[int]          — atoms per element
+    positions_direct   : np.ndarray (N, 3)  — fractional coordinates
+    selective_dynamics : bool
+    flags              : np.ndarray or None  — per-atom T/F flags
+    labels             : list[str]          — per-atom comment labels
+    """
+
     with open(filepath, 'w') as o:
         o.write("Generated by vaspAdsorb.py code\n")
         o.write(f"   {1.0:.14f}\n")
@@ -241,15 +367,29 @@ def write_POSCAR(filepath,
         if selective_dynamics:
             for position, flag, label in zip(positions_direct, flags, labels):
                 o.write(f"{position[0]:20.16f}{position[1]:20.16f}{position[2]:20.16f}"
-                        f"   {flag[0]:s}   {flag[1]:s}   {flag[2]:s}" + f"   {label:>6s}\n")
+                        f"   {flag[0]:s}   {flag[1]:s}   {flag[2]:s}"
+                        f"   {label:>6s}\n")
         else:
             for position, label in zip(positions_direct, labels):
                 o.write(f"{position[0]:20.16f}{position[1]:20.16f}{position[2]:20.16f}"
                         f"   {label:>6s}\n")
 
-def selection_atoms(prompt,
-                    total_atoms,
-                    species):
+def selection_atoms(prompt, total_atoms, species):
+    """Parse free-format atom selection input and return a list of 0-based indexes.
+
+    Accepts element symbols, integer indexes, hyphen-separated ranges, and 'all'.
+    Loops until a valid, non-empty selection within bounds is entered.
+
+    Parameters
+    ----------
+    prompt      : str       — message printed before the input prompt
+    total_atoms : int       — upper bound (exclusive) for valid atom indexes
+    species     : list[str] — per-atom element labels for symbol-based selection
+
+    Returns
+    -------
+    selected : list[int] — 0-based atom indexes
+    """
     
     print(prompt)
     while True:
@@ -270,6 +410,18 @@ def selection_atoms(prompt,
         print("Wrong input atom-indexes! TRY AGAIN!")
 
 def input_direct(lattice_matrix):
+    """Prompt the user for a position in fractional (a, b) coordinates and convert to Cartesian.
+
+    The c component is fixed to 0.0. Input is validated to be a non-negative decimal number.
+
+    Parameters
+    ----------
+    lattice_matrix : np.ndarray (3, 3) — lattice vectors in Å
+
+    Returns
+    -------
+    np.ndarray (3,) — Cartesian coordinates in Å with z = 0
+    """
     
     coords = []
     for direction in ('a', 'b'):
@@ -283,17 +435,36 @@ def input_direct(lattice_matrix):
 
     return np.dot(coords, lattice_matrix)
 
-def place_ontop(lattice_matrix_substrate,
-                total_atoms_substrate,
-                total_atoms_adsorbent,
-                positions_substrate,
-                positions_adsorbent,
-                species_substrate,
-                species_adsorbent,
-                selective_dynamics,
-                flags_adsorbent,
-                number_adsorbent,
-                delta):
+def place_ontop(lattice_matrix_substrate, total_atoms_substrate, total_atoms_adsorbent, positions_substrate,
+                positions_adsorbent, species_substrate, species_adsorbent, selective_dynamics,
+                flags_adsorbent, number_adsorbent, delta):
+    """Place one or more adsorbent copies on top of user-selected substrate sites.
+
+    The user selects a reference height method, an xy anchor point on the adsorbent,
+    and a target site on the substrate for each copy. The adsorbent is translated
+    so its anchor lands at the target site at the specified vertical distance.
+
+    Parameters
+    ----------
+    lattice_matrix_substrate : np.ndarray (3, 3)
+    total_atoms_substrate    : int
+    total_atoms_adsorbent    : int
+    positions_substrate      : np.ndarray (N, 3) — Cartesian coordinates in Å
+    positions_adsorbent      : np.ndarray (M, 3) — Cartesian coordinates in Å
+    species_substrate        : list[str]
+    species_adsorbent        : list[str]
+    selective_dynamics       : bool
+    flags_adsorbent          : np.ndarray or None
+    number_adsorbent         : int  — number of copies to place
+    delta                    : float — vertical separation in Å
+
+    Returns
+    -------
+    dict with keys:
+        positions_adsorbent : np.ndarray (M*N, 3)
+        species_adsorbent   : np.ndarray
+        flags_adsorbent     : np.ndarray or None
+    """
 
     print("""
 Method of reference height of substrate
@@ -396,16 +567,35 @@ Choices of positioning adsorbent for adsorbent {n+1:>2}
             "species_adsorbent": np.vstack(new_species_adsorbent),
             "flags_adsorbent": np.vstack(new_flags_adsorbent) if selective_dynamics else None}
 
-def place_around(lattice_matrix_substrate,
-                 total_atoms_substrate,
-                 positions_substrate,
-                 positions_adsorbent,
-                 species_substrate,
-                 species_adsorbent,
-                 selective_dynamics,
-                 flags_adsorbent,
-                 number_adsorbent,
+def place_around(lattice_matrix_substrate, total_atoms_substrate, positions_substrate, positions_adsorbent,
+                 species_substrate, species_adsorbent, selective_dynamics, flags_adsorbent, number_adsorbent,
                  delta):
+    """Place adsorbent copies symmetrically around a chosen substrate atom.
+
+    Copies are distributed evenly at angle intervals of 2π/N around the target
+    atom. Each copy is rotated about the z-axis using the Rodrigues formula and
+    translated to its ring position at the specified radial distance.
+
+    Parameters
+    ----------
+    lattice_matrix_substrate : np.ndarray (3, 3)
+    total_atoms_substrate    : int
+    positions_substrate      : np.ndarray (N, 3) — Cartesian coordinates in Å
+    positions_adsorbent      : np.ndarray (M, 3) — Cartesian coordinates in Å
+    species_substrate        : list[str]
+    species_adsorbent        : list[str]
+    selective_dynamics       : bool
+    flags_adsorbent          : np.ndarray or None
+    number_adsorbent         : int   — number of copies to place around the target
+    delta                    : float — radial distance from target atom in Å
+
+    Returns
+    -------
+    dict with keys:
+        positions_adsorbent : np.ndarray (M*N, 3)
+        species_adsorbent   : np.ndarray
+        flags_adsorbent     : np.ndarray or None
+    """
 
     reference_adsorbent = np.zeros(3)
     reference_adsorbent[:2] = np.mean(positions_adsorbent, axis=0)[:2]
@@ -478,8 +668,22 @@ Choices of define initial adsorption site
             "species_adsorbent": np.vstack(new_species_adsorbent),
             "flags_adsorbent": np.vstack(new_flags_adsorbent) if selective_dynamics else None}
 
-def rotation_matrix(i,
-                    angle_step):
+def rotation_matrix(i, angle_step):
+    """Construct a rotation matrix for rotation about the z-axis.
+
+    Uses the Rodrigues rotation formula:
+        R = cos θ · I + sin θ · (u×) + (1 − cos θ) · u⊗u
+    where u = [0, 0, 1] and θ = i × angle_step.
+
+    Parameters
+    ----------
+    i          : int   — copy index (0-based)
+    angle_step : float — angular increment in radians (2π / number_adsorbent)
+
+    Returns
+    -------
+    rotate : np.ndarray (3, 3) — rotation matrix
+    """
     
     degree = i * angle_step
 
@@ -494,6 +698,16 @@ def rotation_matrix(i,
     return rotate
 
 def select_direction():
+    """Prompt the user to select which Cartesian directions to fix in Selective Dynamics.
+
+    Accepts free-format input of direction indexes (1=x, 2=y, 3=z),
+    hyphen-separated ranges, and 'all'. Loops until a valid non-empty
+    selection is entered.
+
+    Returns
+    -------
+    fix_coordinates : list[int] — 0-based direction indexes to fix (subset of [0, 1, 2])
+    """
     
     print("""
 Input the direction index to fix (1 to 3):
@@ -526,6 +740,41 @@ Input the direction index to fix (1 to 3):
             print("ERROR! Directions must be between 1 and 3. Try again.")
 
 def main():
+    """Entry point for vaspAdsorb.py — prepare a POSCAR for adsorption calculations.
+
+    Orchestrates the full workflow in the following order:
+
+    1. Parse command-line arguments; print usage and exit if invalid.
+    2. Read the substrate and adsorbent POSCAR files via read_POSCAR().
+    3. Resolve Selective Dynamics flags — pad missing flags with all-'T' arrays
+       if only one of the two input files has Selective Dynamics enabled.
+    4. Prompt the user for the number of adsorbent copies and the vertical
+       separation distance (Å).
+    5. Dispatch to place_ontop() or place_around() based on the user's choice
+       of placement method.
+    6. Assemble the full combined structure (substrate + placed adsorbents).
+    7. If neither input file had Selective Dynamics, optionally prompt the user
+       to define fixed atoms and directions via selection_atoms() and
+       select_direction().
+    8. Convert the combined Cartesian positions to fractional coordinates via
+       cartesian_to_direct().
+    9. Resolve any duplicate element blocks and reorder atoms canonically via
+       mapping_elements().
+    10. Generate per-atom comment labels via define_labels().
+    11. Write the final POSCAR to the output file via write_POSCAR().
+    12. Print a summary table showing the atom counts per element broken down
+        by substrate, adsorbent, and total.
+
+    Command-line arguments
+    ----------------------
+    argv[1] : str — path to the substrate POSCAR file
+    argv[2] : str — path to the adsorbent POSCAR file
+    argv[3] : str — path for the output POSCAR file
+
+    Exits with code 0 if '-h' or '--help' is passed, or if argument count != 4.
+    Exits with code 1 on any file-not-found or invalid-input error encountered
+    in the called functions.
+    """
 
     if os.environ.get('USER') == 'nchotsis':
         print("If you're so unhappy with how I refine my code, feel free to write it yourself.")
@@ -570,29 +819,14 @@ Method of positioning adsorbent
     while True:
         option = input("Enter choice: ")
         if option == '1':
-            place = place_ontop(substrate["lattice_matrix"],
-                                substrate["total_atoms"],
-                                adsorbent["total_atoms"],
-                                substrate["positions_cartesian"],
-                                adsorbent["positions_cartesian"],
-                                substrate["species"],
-                                adsorbent["species"],
-                                selective_dynamics,
-                                flags_adsorbent,
-                                number_adsorbent,
-                                delta)
+            place = place_ontop(substrate["lattice_matrix"], substrate["total_atoms"], adsorbent["total_atoms"],
+                                substrate["positions_cartesian"], adsorbent["positions_cartesian"], substrate["species"],
+                                adsorbent["species"], selective_dynamics, flags_adsorbent, number_adsorbent, delta)
             break
         elif option == '2':
-            place = place_around(substrate["lattice_matrix"],
-                                 substrate["total_atoms"],
-                                 substrate["positions_cartesian"],
-                                 adsorbent["positions_cartesian"],
-                                 substrate["species"],
-                                 adsorbent["species"],
-                                 selective_dynamics,
-                                 flags_adsorbent,
-                                 number_adsorbent,
-                                 delta)
+            place = place_around(substrate["lattice_matrix"], substrate["total_atoms"], substrate["positions_cartesian"],
+                                 adsorbent["positions_cartesian"], substrate["species"], adsorbent["species"],
+                                 selective_dynamics, flags_adsorbent, number_adsorbent, delta)
             break
         else:
             print("ERROR! Wrong choice")
@@ -623,25 +857,12 @@ f"(Free-format input, e.g., 1 3 1-4 C H all)")
                 break
             else:
                 print("ERROR! Wrong input selective dynamic mode")
-    new_positions_direct = cartesian_to_direct(substrate["lattice_matrix"],
-                                               new_positions_cartesian)
-    mapping = mapping_elements(elements,
-                               atom_counts,
-                               new_positions_cartesian,
-                               new_positions_direct,
-                               new_species,
-                               selective_dynamics,
-                               new_flags)
-    labels = define_labels(mapping["elements"],
-                           mapping["atom_counts"])
-    write_POSCAR(argv[3],
-                 substrate["lattice_matrix"],
-                 mapping["elements"],
-                 mapping["atom_counts"],
-                 mapping["positions_direct"],
-                 selective_dynamics,
-                 mapping["flags"],
-                 labels)
+    new_positions_direct = cartesian_to_direct(substrate["lattice_matrix"], new_positions_cartesian)
+    mapping = mapping_elements(elements, atom_counts, new_positions_cartesian, new_positions_direct,
+                               new_species, selective_dynamics, new_flags)
+    labels = define_labels(mapping["elements"], mapping["atom_counts"])
+    write_POSCAR(argv[3], substrate["lattice_matrix"], mapping["elements"], mapping["atom_counts"],
+                 mapping["positions_direct"], selective_dynamics, mapping["flags"], labels)
     
     print(f"\nAdsorption structure written to: {argv[3]}")
     print("-" * 49)
