@@ -5,7 +5,7 @@ import os
 import numpy as np
 
 def usage():
-    """Print usage message and exit."""
+    """Print usage information and exit."""
 
     text = """
 Usage: calDistance.py <input>
