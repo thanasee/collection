@@ -343,7 +343,7 @@ def define_labels(elements, atom_counts):
 
 
 def write_POSCAR(filepath, lattice_matrix, elements, atom_counts,
-                 selective_dynamics, positions_direct, flags, labels):
+                 positions_direct, selective_dynamics, flags, labels):
     """Write a VASP5-format POSCAR file with Direct coordinates.
 
     The scale factor is always written as 1.0 because the lattice vectors
@@ -356,8 +356,8 @@ def write_POSCAR(filepath, lattice_matrix, elements, atom_counts,
     lattice_matrix     : np.ndarray (3, 3)  — lattice vectors in Å
     elements           : list[str]          — element symbols in canonical order
     atom_counts        : list[int]          — atoms per element
-    selective_dynamics : bool
     positions_direct   : np.ndarray (N, 3)  — fractional coordinates
+    selective_dynamics : bool
     flags              : np.ndarray or None  — per-atom T/F flags
     labels             : list[str]          — per-atom comment labels
     """
@@ -874,7 +874,7 @@ def mode_pre(filepath):
     unstrain_path = 'unstrain'
     os.makedirs(unstrain_path, exist_ok=True)
     write_POSCAR(os.path.join(unstrain_path, 'POSCAR'), poscar["lattice_matrix"], mapping["elements"],
-                 mapping["atom_counts"], poscar["selective_dynamics"], mapping["positions_direct"],
+                 mapping["atom_counts"], poscar["positions_direct"], mapping["selective_dynamics"],
                  mapping["flags"], labels)
 
     # Write strained structures
@@ -886,7 +886,7 @@ def mode_pre(filepath):
             new_lattice_matrix = applying_strain(poscar["lattice_matrix"],
                                                  strain_matrix)
             write_POSCAR(os.path.join(strain_path, 'POSCAR'), new_lattice_matrix, mapping["elements"],
-                         mapping["atom_counts"], poscar["selective_dynamics"], mapping["positions_direct"],
+                         mapping["atom_counts"], poscar["positions_direct"], mapping["selective_dynamics"],
                          mapping["flags"], labels)
 
     print(f"Done. Strained POSCARs written for {len(strain_types)} strain types "
