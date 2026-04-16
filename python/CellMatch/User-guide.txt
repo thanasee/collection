@@ -1,0 +1,103 @@
+3
+Installation and running the code
+The code consists of two python scripts (match cells.py and generate cell.py)
+and requires no installation, compilation or special python packages out of the
+standard Linux distributions. It is distributed as a gzipped tar file containing
+the two python scripts and 2 directories with examples.
+
+Running of the code is somewhat described in the theory part of the manuscript and we repeat it here briefly. 
+Having the POSCAR files of the selected input unit cells - POSCAR 1 and POSCAR 2 the user first runs the first script:
+        > python match cells.py POSCAR 1 POSCAR 2
+obtaining the output file results.dat in which typically several options are
+offered for generating a common supercell - given under the index numbers.
+
+Selecting the supercell with index 1 is done by a command:
+        > python generate cell.py 1
+which produces a common supercell file named POSCAR COMMON CELL.
+This ends the program run. Several options to the both python codes are
+available and are described in detail below.
+
+CODE OPTIONS
+
+For match cells.py
+The list of available options is:
+
+--nindex nind
+Integer number nind for search of common unit cell vectors, the values in code
+go from -nind to +nind, the default value is 10.
+
+--tolerance tol
+Tolerance – float value tol – for detecting that two supercell vectors con-
+structed from different unit cells are considered identical. Defined as length of
+the vector difference divided by vector length. Default value 0.01.
+
+--rotate rot
+Rotation angle rot (in degrees) for the first unit cell. Default value is 0. The
+first unit cell (POSCAR 1) will be copied into a file POSCAR 1 rotated 0.0.
+
+--maxatoms mat
+Integer number mat for maximum number of atoms in the supercell, if the
+supercell with larger number of atoms is found it will not be printed - default
+value -1 - meaning that maximum number of atoms is infinite.
+
+--maxstrain mstr
+Float value mstr for maximum strain in the supercell, supercells with larger
+strain value will not be printed - default value -1 - meaning that maximum
+strain is infinite.
+
+--unique 0/1
+Unique switch 0 or 1, default value is 1. In case of 0 value all possible realizations of the equivalent supercells will be printed out.
+
+--output outfile
+Name of the output file outf ile. Default value is results.dat, this file is used
+by generate cell.py to create common supercell.
+
+--show progress 0/1
+Show progress switch 0 or 1. Default value is 1 and the progress is printed on
+the screen. For example in high-throughput applications running on cluster
+etc. it might be convenient to suppress the on screen output.
+
+
+For generate cell.py
+
+--input file infile
+Input file name inf ile from which the parameters are read to generate the
+common supercell. The default value is results.dat.
+
+--tolerance tol
+Tolerance integer value tol used in determining repeating periodic cells in order
+to generate atoms for the common supercell. This parameter with default value
+of 1 should not be changed. If it happens that some atoms are missing in the
+final supercell - please report, and try to increase the value.
+
+--tolerance float tolf
+Tolerance float value tolf used to determine which atoms obtained by repeat-
+ing the original (small) unit cells lie within a new common supercell. This
+number as well as tolerance should not be changed. In case that some atoms
+are missing try to increase the value, while in case that there are too many
+atoms in the supercell decrease the value. Default value is 1e − 4 - and please
+report such cases.
+
+--shift11 --shift12 --shift13 --shift21 --shift22 --shift23 shift
+Shifts along the unit cell vectors for the two original unit cells. For example
+− − shif t110.5 option will shift the atoms of the first unit cell by 0.5 a1 unit
+cell vector.
+
+--shift1x --shift1y --shift1z --shift2x --shift2y --shift2z shift
+Shifts along the Cartesian axes for the two original unit cells. For example
+− − shif t1x3.5 option will shift the atoms of the first unit cell by 3.5  ̊A along the x–axis.
+
+--output outfile
+The name of the output file. Default value is POSCAR COMMON CELL.
+
+--zfix zf
+The value zf in  ̊A of the z–coordinate below which the atoms of the common
+A super cell will be fixed for VASP selective dynamics. The option ”F F F”
+will be written. In the case of negative value zf the atoms above the −zf
+coordinate will be fixed.
+
+--draw 0/1
+The draw switch 0 or 1. In case of value of 1 the code will draw a supercell
+generated from unit cell 1 and unit cell 2 - the mismatch will be visible to
+estimate the strain. Original unit cells are drawn as well.
+
