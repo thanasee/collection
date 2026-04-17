@@ -4,6 +4,7 @@ from sys import argv, exit
 import os
 import numpy as np
 
+
 def usage():
     """Print usage information and exit."""
     text = """
@@ -20,6 +21,7 @@ This script was developed by Thanasee Thanasarnsurapong.
 """
     print(text)
     exit(0)
+
 
 def read_POSCAR(filepath):
     """Read a VASP POSCAR file and return its contents as a dictionary.
@@ -373,6 +375,7 @@ def write_POSCAR(filepath, lattice_matrix, elements, atom_counts,
                 o.write(f"{position[0]:20.16f}{position[1]:20.16f}{position[2]:20.16f}"
                         f"   {label:>6s}\n")
 
+
 def applying_strain(lattice_matrix):
     """
     Prompt the user to input a strain matrix and apply it to the lattice matrix.
@@ -427,6 +430,7 @@ Enter strain matrix (separate by space):"""
     return {"strain_matrix": strain_matrix,
             "lattice_matrix": new}
 
+
 def main():
     """Parse arguments, apply strain to structure, and write output"""
     
@@ -445,6 +449,7 @@ def main():
     for strain in strained["strain_matrix"]:
         print(f"  {strain[0]:>6.3f}  {strain[1]:>6.3f}  {strain[2]:>6.3f}")
     print("")
+
 
 if __name__ == "__main__":
     main()
