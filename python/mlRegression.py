@@ -4,6 +4,7 @@ from sys import argv, exit
 import os
 import numpy as np
 
+
 def usage():
     """Print usage information and exit."""
     text = """
@@ -16,6 +17,7 @@ This script was developed by Thanasee Thanasarnsurapong.
 """
     print(text)
     exit(0)
+
 
 def read_files(input_file):
     """Read all lines from the ML_REG file.
@@ -35,6 +37,7 @@ def read_files(input_file):
         exit(0)
     with open(input_file, 'r') as f:
         return f.readlines()
+
 
 def find_section_index(lines):
     """Locate the line indices of the three data sections in the ML_REG file.
@@ -77,6 +80,13 @@ def find_section_index(lines):
         exit(0)
     return energy_index, force_index, stress_index
 
+
+def parse_block(line_slice):
+    """Parse a slice of lines into a 2D float array, skipping blank lines."""
+    return np.array([[float(x) for x in line.split()]
+                     for line in line_slice if line.strip()])
+
+
 def extract_arrays(lines, energy_index, force_index, stress_index):
     """Extract energy, force, and stress arrays from the ML_REG file.
 
@@ -104,15 +114,12 @@ def extract_arrays(lines, energy_index, force_index, stress_index):
     stress : ndarray, shape (N_frames * 6, 2)
         Stress tensor components (kbar) — DFT and MLFF columns.
     """
-    def parse_block(line_slice):
-        """Parse a slice of lines into a 2D float array, skipping blank lines."""
-        return np.array([[float(x) for x in line.split()]
-                         for line in line_slice if line.strip()])
 
     energy = parse_block(lines[energy_index + 2 : force_index - 1])
     force  = parse_block(lines[force_index  + 2 : stress_index - 1])
     stress = parse_block(lines[stress_index + 2 :])
     return energy, force, stress
+
 
 def validate_dimensions(energy_count, force_count, stress_count):
     """Verify that force and stress counts are consistent with energy count.
@@ -136,6 +143,7 @@ def validate_dimensions(energy_count, force_count, stress_count):
         print("ERROR! Stress count does not match 6 * energy_count. Check ML_REG structure.")
         exit(0)
 
+
 def compute_rmse(dft, mlff):
     """Compute the Root Mean Square Error (RMSE) between DFT and MLFF arrays.
 
@@ -153,6 +161,7 @@ def compute_rmse(dft, mlff):
     """
     return np.sqrt(np.mean((dft - mlff) ** 2))
 
+
 def compute_mae(dft, mlff):
     """Compute the Mean Absolute Error (MAE) between DFT and MLFF arrays.
 
@@ -169,6 +178,7 @@ def compute_mae(dft, mlff):
         MAE value in the same units as the input arrays.
     """
     return np.mean(np.abs(dft - mlff))
+
 
 def compute_r2(dft, mlff):
     """Compute the R-squared (coefficient of determination) score.
@@ -192,6 +202,7 @@ def compute_r2(dft, mlff):
     ss_res = np.sum((dft - mlff) ** 2)
     ss_tot = np.sum((dft - np.mean(dft)) ** 2)
     return 1 - ss_res / ss_tot
+
 
 def compute_metrics(energy_per_atom, force, stress):
     """Compute RMSE, MAE, and R² for energy, force, and stress.
@@ -229,6 +240,7 @@ def compute_metrics(energy_per_atom, force, stress):
     }
     return metrics
 
+
 def write_energy(energy_per_atom, filename='Energy.dat'):
     """Write per-atom energy parity data to a file for xmgrace plotting.
 
@@ -246,6 +258,7 @@ def write_energy(energy_per_atom, filename='Energy.dat'):
         o.write("#  DFT              MLFF\n")
         for row in energy_per_atom:
             o.write(f" {row[0]:>14.6f}   {row[1]:>14.6f}\n")
+
 
 def write_force(force_reshape, filename='Force.dat'):
     """Write force parity data along X, Y, Z directions to a file.
@@ -270,6 +283,7 @@ def write_force(force_reshape, filename='Force.dat'):
             for row in force_reshape[:, i, :]:
                 o.write(f" {row[0]:>14.6E}   {row[1]:>14.6E}\n")
 
+
 def write_stress(stress_reshape, filename='Stress.dat'):
     """Write stress parity data for all 6 Voigt components to a file.
 
@@ -292,6 +306,7 @@ def write_stress(stress_reshape, filename='Stress.dat'):
             o.write("#  DFT              MLFF\n")
             for row in stress_reshape[:, i, :]:
                 o.write(f" {row[0]:>14.6E}   {row[1]:>14.6E}\n")
+
 
 def write_errors(metrics, filename='ERROR.dat'):
     """Write all error metrics to a file and print them to the terminal.
@@ -321,6 +336,7 @@ def write_errors(metrics, filename='ERROR.dat'):
         o.write('\n'.join(lines) + '\n')
     for line in lines:
         print(line)
+
 
 def main():
     """Parse arguments, collect data types, compute statistic variables, and write all outputs."""
@@ -356,6 +372,7 @@ def main():
     write_force(force_reshape)
     write_stress(stress_reshape)
     write_errors(metrics)
+
 
 if __name__ == '__main__':
     main()
