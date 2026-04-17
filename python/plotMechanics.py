@@ -19,6 +19,7 @@ PROPERTY_MAP = {
     "3": {"data_type": "Shear Modulus",    "unit": "N/m", "decimal": 0, "save_file": "Shear.png"},
 }
 
+
 def usage():
     """Print usage information and exit."""
     
@@ -36,6 +37,7 @@ and developed by Thanasee Thanasarnsurapong.
 """
     print(text)
     exit(0)
+
 
 def ask_property():
     """
