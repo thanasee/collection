@@ -974,46 +974,39 @@ def prompt_selection(candidates):
 # Lattice type detection and stacking shift generation
 # ---------------------------------------------------------------------------
 
-def detect_lattice_type(lattice_matrix, angle_tol=2.0, length_tol=0.05):
-    """Detect the 2D lattice type from the in-plane lattice vectors.
+def detect_lattice_type(lattice_matrix):
+    """Classify the 2D Bravais lattice type from the in-plane lattice vectors.
 
-    Classifies based on the ratio of vector lengths and the angle between them:
-        hexagonal   : |A1| ≈ |A2|  and  angle ≈ 60° or 120°
-        square      : |A1| ≈ |A2|  and  angle ≈ 90°
-        rectangular : |A1| ≠ |A2|  and  angle ≈ 90°
-        oblique     : everything else
+    Compares the in-plane lattice lengths (a, b) and the angle γ between them
+    to identify the crystal system according to the standard 2D classification:
+
+        square      : γ = 90°  and  a = b
+        rectangular : γ = 90°  and  a ≠ b
+        hexagonal   : γ = 60° or 120°  and  a = b
+        oblique     : all other cases
 
     Parameters
     ----------
-    lattice_matrix : np.ndarray (3, 3) — supercell lattice (in-plane rows 0 and 1)
-    angle_tol      : float — tolerance in degrees for angle classification
-    length_tol     : float — relative tolerance for length equality
+    lattice_matrix : np.ndarray, shape (3, 3) — row vectors of the lattice in Å
 
     Returns
     -------
-    str — one of 'hexagonal', 'square', 'rectangular', 'oblique'
+    str : one of 'square', 'rectangular', 'hexagonal', 'oblique'
     """
 
-    A1 = lattice_matrix[0]
-    A2 = lattice_matrix[1]
+    length_a = np.linalg.norm(lattice_matrix[0])
+    length_b = np.linalg.norm(lattice_matrix[1])
+    gamma = np.degrees(np.arccos(np.clip(
+        np.dot(lattice_matrix[0], lattice_matrix[1]) /
+        (length_a * length_b), -1., 1.)))
 
-    norm_A1 = np.linalg.norm(A1)
-    norm_A2 = np.linalg.norm(A2)
-
-    cos_angle = np.dot(A1, A2) / (norm_A1 * norm_A2)
-    cos_angle = np.clip(cos_angle, -1.0, 1.0)
-    angle = np.degrees(np.arccos(cos_angle))
-
-    lengths_equal = abs(norm_A1 - norm_A2) / max(norm_A1, norm_A2) < length_tol
-
-    if lengths_equal and (abs(angle - 60.0) < angle_tol or abs(angle - 120.0) < angle_tol):
-        return "hexagonal"
-    elif lengths_equal and abs(angle - 90.0) < angle_tol:
-        return "square"
-    elif abs(angle - 90.0) < angle_tol:
-        return "rectangular"
+    if np.abs(gamma - 90.) < 1e-5:
+        return 'square' if np.abs(length_a - length_b) < 1e-8 else 'rectangular'
+    elif ((np.abs(gamma - 60.) < 1e-5 or np.abs(gamma - 120.) < 1e-5)
+          and np.abs(length_a - length_b) < 1e-8):
+        return 'hexagonal'
     else:
-        return "oblique"
+        return 'oblique'
 
 
 def get_stacking_shifts(lattice_type):
