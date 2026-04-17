@@ -4,6 +4,7 @@ from sys import argv, exit
 import os
 import numpy as np
 
+
 def usage():
     """Print usage information and exit."""
     text = """
@@ -21,6 +22,7 @@ and developed by Thanasee Thanasarnsurapong.
 """
     print(text)
     exit(0)
+
 
 def read_POSCAR(filepath):
     """Read a VASP POSCAR file and return its contents as a dictionary.
@@ -374,6 +376,7 @@ def write_POSCAR(filepath, lattice_matrix, elements, atom_counts,
                 o.write(f"{position[0]:20.16f}{position[1]:20.16f}{position[2]:20.16f}"
                         f"   {label:>6s}\n")
 
+
 def input_expansion():
     """Prompt the user to enter a supercell expansion matrix and validate it.
 
@@ -419,6 +422,7 @@ Enter expansion matrix (separate by space):"""
 "Please enter integer components that yield a positive integer determinant.")
     
     return expansion_matrix, det_int
+
 
 def build_supercell(expansion_matrix, replicas, lattice_matrix, atom_counts, total_atoms,
                     positions_cartesian, species, selective_dynamics, flags):
@@ -505,6 +509,7 @@ def build_supercell(expansion_matrix, replicas, lattice_matrix, atom_counts, tot
             "species": new_species,
             "flags": new_flags if selective_dynamics else None}
 
+
 def main():
     """Parse argumetns, expand supercell, and write output"""
     if '-h' in argv or '--help' in argv or len(argv) != 3:
@@ -531,6 +536,7 @@ def main():
     print("-" * 39)
     print(f"  Total    |  {unitcell['total_atoms']:<11}|  {supercell['total_atoms']}")
     print("-" * 39 + "\n")
+
 
 if __name__ == "__main__":
     main()
