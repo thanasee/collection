@@ -4,6 +4,7 @@ from sys import argv, exit
 import os
 import numpy as np
 
+
 def usage():
     """Print usage information and exit."""
     text = """
@@ -17,6 +18,7 @@ This script was developed by Thanasee Thanasarnsurapong.
 """
     print(text)
     exit(0)
+
 
 def read_POSCAR(filepath):
     """Read a VASP POSCAR file and return its contents as a dictionary.
@@ -370,6 +372,7 @@ def write_POSCAR(filepath, lattice_matrix, elements, atom_counts,
                 o.write(f"{position[0]:20.16f}{position[1]:20.16f}{position[2]:20.16f}"
                         f"   {label:>6s}\n")
 
+
 def build_second_layer(positions_cartesian):
     """Build the second layer by shifting a copy of the monolayer upward in z.
 
@@ -397,6 +400,7 @@ def build_second_layer(positions_cartesian):
     
     return thickness, second_positions_cartesion
 
+
 def mirror_image(positions_cartesian):
     """Reflect atomic positions in Cartesian space across a XY plane.
 
@@ -413,6 +417,7 @@ def mirror_image(positions_cartesian):
     new_positions_cartesian[:, 2] = np.max(positions_cartesian[:, 2]) + np.min(positions_cartesian[:, 2]) - positions_cartesian[:, 2]
     
     return new_positions_cartesian
+
 
 def unwrap(positions_direct):
     """Reconstruct a contiguous cluster by unwrapping periodic boundary conditions.
@@ -436,6 +441,7 @@ def unwrap(positions_direct):
     delta -= np.round(delta)
     
     return reference, reference + delta
+
 
 def center_sheet(positions_direct):
     """Shift a 2D sheet so the vacuum direction is centered at 0.5 and the
@@ -463,6 +469,7 @@ def center_sheet(positions_direct):
     new[:, vacuum]   = unwrapped[:, vacuum] - center[vacuum] + 0.5
     
     return new % 1.0
+
 
 def get_2d_lattice_type(lattice_matrix):
     """Classify the 2D Bravais lattice type from the in-plane lattice vectors.
@@ -497,6 +504,7 @@ def get_2d_lattice_type(lattice_matrix):
         return 'hexagonal'
     else:
         return 'oblique'
+
 
 def get_shift_grid(lattice_type):
     """Return the high-symmetry stacking shift points for the given 2D lattice type.
@@ -534,6 +542,7 @@ def get_shift_grid(lattice_type):
                 (1./3.,  2./3.),
                 (2./3.,  1./3.)]
 
+
 def shift_sheet(positions_direct, shift_a, shift_b):
     """Translate a sheet by a fractional shift along the a and b lattice directions.
 
@@ -558,6 +567,7 @@ def shift_sheet(positions_direct, shift_a, shift_b):
     new %= 1.0
     
     return new
+
 
 def build_bilayer(atom_counts, first_positions_direct, second_positions_direct, species, selective_dynamics, flags):
     """Stack two monolayer sheets into a bilayer structure.
@@ -597,6 +607,7 @@ def build_bilayer(atom_counts, first_positions_direct, second_positions_direct, 
             "positions_direct": center_positions_direct,
             "species": new_species,
             "flags": new_flags if selective_dynamics else None}
+
 
 def main():
     """Parse argument, build second layer, stack both layers, and write output files"""
@@ -639,6 +650,7 @@ def main():
             write_POSCAR(output_path, monolayer["lattice_matrix"], mapping["elements"], mapping["atom_counts"],
                          mapping["positions_direct"], monolayer["selective_dynamics"], mapping["flags"], labels)
     print(f"Written {len(shifts)} POSCARs Finished!\n")
+
 
 if __name__ == "__main__":
     main()
