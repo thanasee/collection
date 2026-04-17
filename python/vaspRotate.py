@@ -4,6 +4,7 @@ from sys import argv, exit
 import os
 import numpy as np
 
+
 def usage():
     """Print usage information and exit."""
     text = """
@@ -15,6 +16,7 @@ This script was developed by Thanasee Thanasarnsurapong.
 """
     print(text)
     exit(0)
+
 
 def read_POSCAR(filepath):
     """Read a VASP POSCAR file and return its contents as a dictionary.
@@ -368,6 +370,7 @@ def write_POSCAR(filepath, lattice_matrix, elements, atom_counts,
                 o.write(f"{position[0]:20.16f}{position[1]:20.16f}{position[2]:20.16f}"
                         f"   {label:>6s}\n")
 
+
 def rotation_matrix():
     """Construct a 3×3 rotation matrix for rotation about an arbitrary axis.
 
@@ -426,6 +429,7 @@ Choices of rotation axis
     
     return rotate
 
+
 def select_index(total_atoms, species):
     """Parse free-format atom selection input and return a list of 0-based indexes.
 
@@ -468,6 +472,7 @@ Input element-symbol and/or atom-indexes to choose ({1:>3} to {total_atoms:>3})
             break
  
     return selected_atoms
+
 
 def select_pivot(lattice_matrix, total_atoms, positions_cartesian, species):
     """Determine the material type and pivot point for rotation interactively.
@@ -544,6 +549,7 @@ Method for selecting the pivot point of molecule
         ref_point = np.mean(positions_cartesian[selected_atoms], axis=0)
         return input_type, selected_atoms, ref_point
 
+
 def rotate_atoms(lattice_matrix, total_atoms, positions_cartesian, species, rotate_matrix):
     """Apply a rotation matrix to atoms and return new Cartesian coordinates.
 
@@ -574,6 +580,7 @@ def rotate_atoms(lattice_matrix, total_atoms, positions_cartesian, species, rota
 
     return new_positions_cartesian
 
+
 def main():
     """Parse arguments, build rotation matrix from specified axis and angle,
     rotate selected atom, and write outputs.
@@ -594,6 +601,7 @@ def main():
                  mapping["positions_direct"], unrotate["selective_dynamics"], mapping["flags"], labels)
     
     print("")
+
 
 if __name__ == "__main__":
     main()
