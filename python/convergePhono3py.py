@@ -5,6 +5,7 @@ import os, re
 import numpy as np
 import h5py as h5
 
+
 def usage():
     """Print usage information and exit."""
     text = """
@@ -16,6 +17,7 @@ This script was developed by Thanasee Thanasarnsurapong.
 """
     print(text)
     exit(0)
+
 
 def find_kappa_files():
     """Find and return a sorted list of phono3py kappa HDF5 files in the current directory.
@@ -34,16 +36,27 @@ def find_kappa_files():
     -----
     Exits with an error message if no matching files are found.
     """
-    def mesh_number(filename):
-        """Extract the integer mesh number from a kappa-mXXX.hdf5 filename."""
-        match = re.search(r"kappa-m(\d+)\.hdf5", filename)
-        return int(match.group(1)) if match else float('inf')
 
     files = [f for f in os.listdir() if f.startswith("kappa-m") and f.endswith(".hdf5")]
     if not files:
         print("ERROR! kappa hdf5 files are not found.")
         exit(0)
     return sorted(files, key=mesh_number)
+
+
+def mesh_number(filename):
+    """Extract the integer mesh number from a kappa-mXXX.hdf5 filename."""
+    match = re.search(r"kappa-m(\d+)\.hdf5", filename)
+    return int(match.group(1)) if match else float('inf')
+
+
+def load(f, key):
+    """Load a dataset from an open HDF5 file and suppress numerical noise."""
+    if key not in f:
+        return None
+    arr = np.array(f[key])
+    return np.where(arr < 1e-12, 0.0, arr)
+
 
 def read_HDF5(filepath):
     """Read thermal conductivity data from a phono3py HDF5 output file.
@@ -70,12 +83,6 @@ def read_HDF5(filepath):
         'kappa_C', 'kappa_P_RTA', 'kappa_TOT_RTA', 'kappa_P_exact', 'kappa_TOT_exact'.
         Each value is a numpy array or None if not present in the file.
     """
-    def load(f, key):
-        """Load a dataset from an open HDF5 file and suppress numerical noise."""
-        if key not in f:
-            return None
-        arr = np.array(f[key])
-        return np.where(arr < 1e-12, 0.0, arr)
 
     with h5.File(filepath, 'r') as f:
         data = {'mesh'           : np.array(f["mesh"])        if 'mesh'        in f else None,
@@ -93,6 +100,7 @@ def read_HDF5(filepath):
                 'kappa_TOT_exact': load(f, 'kappa_TOT_exact')}
 
     return data
+
 
 def validate(data, filepath):
     """Check that the HDF5 file contains at least one usable set of kappa variables.
@@ -120,6 +128,7 @@ def validate(data, filepath):
     if k is None and (kC is None or kPR is None or kTR is None):
         print(f"ERROR! Essential variables are not found in {filepath}.")
         exit(0)
+
 
 def choose_temperature(temperature, filepath, last_temperature, current_temp):
     """Select the target temperature for a given file.
@@ -155,6 +164,7 @@ def choose_temperature(temperature, filepath, last_temperature, current_temp):
 
     return current_temp
 
+
 def get_temp_index(temperature, target_temp, filepath):
     """Return the array index corresponding to the target temperature.
 
@@ -182,6 +192,7 @@ def get_temp_index(temperature, target_temp, filepath):
         exit(0)
     return index[0]
 
+
 def extract_row(mesh, kappa_arr, temp_index):
     """Extract one data row for a given temperature from a kappa array.
 
@@ -207,6 +218,7 @@ def extract_row(mesh, kappa_arr, temp_index):
     return (mesh[0], mesh[1], mesh[2],
             kappa_arr[temp_index, 0], kappa_arr[temp_index, 1], kappa_arr[temp_index, 2],
             kappa_arr[temp_index, 3], kappa_arr[temp_index, 4], kappa_arr[temp_index, 5])
+
 
 def write_dat(filename, rows, display=False):
     """Write kappa-vs-mesh data to a .dat file and optionally print to stdout.
@@ -244,6 +256,7 @@ def write_dat(filename, rows, display=False):
         for item in rows:
             print(row_fmt.format(*item))
         print("")
+
 
 def main():
     """Parses arguments, sort kappa HDF5 files, and write outputs."""
@@ -291,6 +304,7 @@ def main():
         rows = collected[key]
         if rows:
             write_dat(filename, np.array(rows), display=display)
+
 
 if __name__ == "__main__":
     main()
