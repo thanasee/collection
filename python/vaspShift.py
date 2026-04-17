@@ -4,6 +4,7 @@ from sys import argv, exit
 import os
 import numpy as np
 
+
 def usage():
     """Print usage information and exit."""
     
@@ -22,6 +23,7 @@ This script was developed by Thanasee Thanasarnsurapong.
 """
     print(text)
     exit(0)
+
 
 def read_POSCAR(filepath):
     """Read a VASP POSCAR file and return its contents as a dictionary.
@@ -375,6 +377,7 @@ def write_POSCAR(filepath, lattice_matrix, elements, atom_counts,
                 o.write(f"{position[0]:20.16f}{position[1]:20.16f}{position[2]:20.16f}"
                         f"   {label:>6s}\n")
 
+
 def unwrap(positions_direct):
     """Reconstruct a contiguous cluster by unwrapping periodic boundary conditions.
 
@@ -398,6 +401,7 @@ def unwrap(positions_direct):
     
     return reference, reference + delta
     
+
 def get_direction(prompt):
     """Prompt the user to select a lattice direction (X, Y, or Z).
 
@@ -423,6 +427,7 @@ Input the direction index of {prompt} direction (1 to 3):
             print("ERROR! Directions must be between 1 and 3. Try again.")
         except ValueError:
             print("ERROR! Must enter a number. Try again.")
+
 
 def get_adsorbent_atoms(total_atoms, species):
     """Prompt the user to select a set of adsorbate atoms by index, range, or element.
@@ -462,6 +467,7 @@ Input element-symbol and/or atom-indexes of adsorbent ({1:>3} to {total_atoms:>3
         else:
             return adsorbent_atoms
 
+
 def shift_molecule(positions_direct):
     """Shift all atoms so the structure centroid lands at the cell center (0.5, 0.5, 0.5).
 
@@ -482,6 +488,7 @@ def shift_molecule(positions_direct):
     center = np.mean(unwrapped, axis=0)
     
     return (unwrapped - center + 0.5) % 1.0
+
 
 def shift_wire(positions_direct):
     """Shift a nanowire so the extend direction starts at origin and the
@@ -510,6 +517,7 @@ def shift_wire(positions_direct):
     
     return new % 1.0
 
+
 def shift_sheet(positions_direct):
     """Shift a 2D sheet so the vacuum direction is centered at 0.5 and the
     periodic directions start at origin.
@@ -537,6 +545,7 @@ def shift_sheet(positions_direct):
     
     return new % 1.0
 
+
 def shift_bulk(positions_direct):
     """Shift all atoms so atom[0] lands at the cell origin (0, 0, 0).
 
@@ -555,6 +564,7 @@ def shift_bulk(positions_direct):
     
     reference, unwrapped = unwrap(positions_direct)
     return (unwrapped - reference) % 1.0
+
 
 def shift_special(total_atoms, positions_direct, species):
     """Shift a selected adsorbate group so its centroid is centered in XY at (0.5, 0.5)
@@ -589,6 +599,7 @@ def shift_special(total_atoms, positions_direct, species):
     new[:, 2]  = unwrapped[:, 2]
     
     return new % 1.0
+
 
 def shift(total_atoms, positions_direct, species):
     """Prompt the user to select a shifting mode and apply the corresponding shift.
@@ -641,6 +652,7 @@ Choices of type of material
         else:
             print("ERROR!! Choose again")
 
+
 def main():
     """Parse arguments, shift atoms with selected method, and write output"""
     
@@ -657,6 +669,7 @@ def main():
                  unshift["selective_dynamics"], mapping["flags"], labels)
     
     print("")
+
 
 if __name__ == "__main__":
     main()
