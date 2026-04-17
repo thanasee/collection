@@ -4,6 +4,7 @@ from sys import argv, exit
 import os
 import numpy as np
 
+
 def usage():
     """Print usage information and exit."""
     text = """
@@ -15,6 +16,7 @@ This script was developed by Thanasee Thanasarnsurapong.
 """
     print(text)
     exit(0)
+
 
 def read_POSCAR(filepath):
     """Read a VASP POSCAR file and return its contents as a dictionary.
@@ -368,6 +370,7 @@ def write_POSCAR(filepath, lattice_matrix, elements, atom_counts,
                 o.write(f"{position[0]:20.16f}{position[1]:20.16f}{position[2]:20.16f}"
                         f"   {label:>6s}\n")
 
+
 def main():
     """Parses command-line arguments and writes the reformatted VASP5 POSCAR.
     """
@@ -381,6 +384,7 @@ def main():
     labels = define_labels(mapping["elements"], mapping["atom_counts"])
     write_POSCAR(argv[2], unformat["lattice_matrix"], mapping["elements"], mapping["atom_counts"],
                  mapping["positions_direct"], unformat["selective_dynamics"], mapping["flags"], labels)
+
 
 if __name__ == "__main__":
     main()
