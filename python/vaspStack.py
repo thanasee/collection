@@ -5,7 +5,7 @@ import os
 import numpy as np
 
 def usage():
-    
+    """Print usage information and exit."""
     text = """
 Usage: vaspStack.py <input>
 
@@ -19,14 +19,41 @@ This script was developed by Thanasee Thanasarnsurapong.
     exit(0)
 
 def read_POSCAR(filepath):
-    
+    """Read a VASP POSCAR file and return its contents as a dictionary.
+
+    Supports both VASP4 (no element line) and VASP5 (with element line) formats,
+    scalar and negative (volume-based) scaling factors, a 3-component scaling
+    vector, Selective Dynamics, and both Direct and Cartesian coordinate modes.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to the POSCAR file to read.
+
+    Returns
+    -------
+    dict with keys:
+        lattice_matrix      : np.ndarray, shape (3, 3)  — lattice vectors in Å
+        elements            : list[str]                 — element symbols
+        atom_counts         : list[int]                 — number of atoms per element
+        total_atoms         : int                       — total number of atoms
+        positions_cartesian : np.ndarray, shape (N, 3)  — Cartesian coordinates in Å
+        positions_direct    : np.ndarray, shape (N, 3)  — fractional coordinates
+        species             : list[str]                 — element symbol per atom
+        selective_dynamics  : bool                      — whether Selective Dynamics is present
+        flags               : np.ndarray or None        — T/F flags per atom, or None
+    """
+
     if not os.path.exists(filepath):
         print(f"ERROR!\nFile: {filepath} does not exist.")
         exit(1)
-    
+
     with open(filepath, 'r') as poscar:
         lines = poscar.readlines()
-    
+
+    # Parse the scaling factor (line 2):
+    # - 1 value  : uniform scalar; negative means target volume in Å**3
+    # - 3 values : per-axis scale applied row-wise to the lattice matrix
     if len(lines[1].split()) == 1:
         raw_scale = float(lines[1])
         raw_lattice_matrix = np.array([[float(x) for x in line.split()]
@@ -47,7 +74,9 @@ def read_POSCAR(filepath):
     else:
         print("ERROR! The scaling factor must be 1 or 3 components.")
         exit(1)
-    
+
+    # Detect VASP4 vs VASP5 format by checking whether line 6 starts with a number.
+    # VASP4 has no element-symbol line, so the user is prompted for species names.
     elements = []
     is_number = lines[5].split()[0].isdecimal()
     if is_number:
@@ -64,7 +93,8 @@ def read_POSCAR(filepath):
         selective_dynamics = lines[6].lower().startswith('s')
         position_start = 8 if selective_dynamics else 7
     else:
-        # VASP5 format: element symbols present
+        # VASP5 format: element symbols present.
+        # Strip potential PAW/GGA suffixes such as '_pv' or '/GGA'.
         raw_elements = lines[5].split()
         for name in raw_elements:
             elements.append(name.split('/')[0].split('_')[0])
@@ -79,54 +109,96 @@ def read_POSCAR(filepath):
     positions = np.array([[float(x) for x in lines[i].split()[:3]]
                           for i in range(position_start, position_stop)])
 
+    # Build a per-atom species list (e.g. ['Mo', 'Mo', 'S', 'S', 'S'])
     species = [x for i, x in enumerate(elements)
                for _ in range(atom_counts[i])]
 
+    # Read Selective Dynamics T/F flags if present
     flags = None
     if selective_dynamics:
         flags = np.array([[x for x in lines[i].split()[3:6]]
                           for i in range(position_start, position_stop)])
 
-    # Detect coordinate type
+    # Convert coordinates to both Direct and Cartesian representations
     is_direct = lines[position_start - 1].strip().lower().startswith('d')
     if is_direct:
-        # If direct coordinate then compute cartesian coordinate
         positions_direct = positions % 1.0
         positions_cartesian = direct_to_cartesian(lattice_matrix, positions_direct)
     else:
-        # If cartesian coordinate then direct coordinate
         positions_cartesian = positions * scale
         positions_direct = cartesian_to_direct(lattice_matrix, positions_cartesian)
-    
-    return {"lattice_matrix": lattice_matrix,
-            "elements": elements,
-            "atom_counts": atom_counts,
-            "total_atoms": total_atoms,
-            "positions_cartesian": positions_cartesian,
-            "positions_direct": positions_direct,
-            "species": species,
-            "selective_dynamics": selective_dynamics,
-            "flags": flags if selective_dynamics else None}
 
-def direct_to_cartesian(lattice_matrix,
-                        positions_direct):
-    
+    return {"lattice_matrix":     lattice_matrix,
+            "elements":           elements,
+            "atom_counts":        atom_counts,
+            "total_atoms":        total_atoms,
+            "positions_cartesian": positions_cartesian,
+            "positions_direct":   positions_direct,
+            "species":            species,
+            "selective_dynamics": selective_dynamics,
+            "flags":              flags if selective_dynamics else None}
+
+
+def direct_to_cartesian(lattice_matrix, positions_direct):
+    """Convert fractional (Direct) coordinates to Cartesian coordinates.
+
+    Uses the relation:  r_cart = r_direct @ lattice_matrix
+
+    Parameters
+    ----------
+    lattice_matrix    : np.ndarray, shape (3, 3) — row vectors of the lattice in Å
+    positions_direct  : np.ndarray, shape (N, 3) — fractional coordinates
+
+    Returns
+    -------
+    positions_cartesian : np.ndarray, shape (N, 3) — Cartesian coordinates in Å
+    """
+
     positions = positions_direct % 1.0
     positions_cartesian = np.dot(positions, lattice_matrix)
-    
+
     return positions_cartesian
 
-def cartesian_to_direct(lattice_matrix,
-                        positions_cartesian):
-    
+
+def cartesian_to_direct(lattice_matrix, positions_cartesian):
+    """Convert Cartesian coordinates to fractional (Direct) coordinates.
+
+    Uses the relation:  r_direct = r_cart @ lattice_matrix⁻¹
+
+    Parameters
+    ----------
+    lattice_matrix      : np.ndarray, shape (3, 3) — row vectors of the lattice in Å
+    positions_cartesian : np.ndarray, shape (N, 3) — Cartesian coordinates in Å
+
+    Returns
+    -------
+    positions_direct : np.ndarray, shape (N, 3) — fractional coordinates in [0, 1)
+    """
+
     positions_direct = np.dot(positions_cartesian, np.linalg.inv(lattice_matrix)) % 1.0
-    
+
     return positions_direct
 
+
 def check_elements(elements):
-    
+    """Check for duplicate element symbols and prompt the user for a canonical order.
+
+    If duplicate symbols are found (e.g. ['Mo', 'S', 'Mo']), the user is asked
+    to specify the desired ordering of the unique species. An empty input accepts
+    the default order (first-occurrence order).
+
+    Parameters
+    ----------
+    elements : list[str] — element symbols as parsed from the POSCAR
+
+    Returns
+    -------
+    list[str] or None
+        The user-specified element order if duplicates were found, else None.
+    """
+
     unique_elements = list(dict.fromkeys(elements))
-     
+
     if len(elements) != len(unique_elements):
         print("\nFound duplicated elements in POSCAR!")
         print("Unique elements: [" + " ".join(unique_elements) + "]")
@@ -134,7 +206,7 @@ def check_elements(elements):
             sort_elements = input("Enter the desired element order (separate by space): ").split()
             if len(sort_elements) == 0:
                 print("Warning! Empty input — using default unique element order.")
-                sort_elements = unique_elements.copy()
+                return unique_elements.copy()
             if (len(sort_elements) == len(unique_elements) and
                     set(sort_elements) == set(unique_elements)):
                 return sort_elements
@@ -142,22 +214,46 @@ def check_elements(elements):
     else:
         return None
 
-def mapping_elements(elements,
-                     atom_counts,
-                     positions_cartesian,
-                     positions_direct,
-                     species,
-                     selective_dynamics,
-                     flags,
-                     sort_elements=None):
-    
+
+def mapping_elements(elements, atom_counts, positions_cartesian, positions_direct,
+                     species, selective_dynamics, flags, sort_elements=None):
+    """Re-order atoms so that each element block is contiguous and sorted canonically.
+
+    Groups atomic positions by element symbol, resolves any duplicate element
+    entries via check_elements(), and returns arrays sorted according to the
+    specified (or user-supplied) element order. This is required because some
+    POSCARs interleave atoms of the same species across multiple blocks.
+
+    Parameters
+    ----------
+    elements            : list[str]            — element symbols from POSCAR
+    atom_counts         : list[int]            — atoms per element block
+    positions_cartesian : np.ndarray (N, 3)    — Cartesian coordinates in Å
+    positions_direct    : np.ndarray (N, 3)    — fractional coordinates
+    species             : list[str]            — per-atom element labels
+    selective_dynamics  : bool                 — whether Selective Dynamics is used
+    flags               : np.ndarray or None   — per-atom T/F flags
+    sort_elements       : list[str] or None    — explicit element order (optional)
+
+    Returns
+    -------
+    dict with keys:
+        elements            : list[str]
+        atom_counts         : list[int]
+        positions_cartesian : np.ndarray (N, 3)
+        positions_direct    : np.ndarray (N, 3)
+        species             : list[str]
+        flags               : np.ndarray or None
+    """
+
     new_elements = elements.copy()
     new_atom_counts = atom_counts.copy()
     new_positions_cartesian = positions_cartesian.copy()
     new_positions_direct = positions_direct.copy()
     new_species = species.copy()
     new_flags = flags.copy() if selective_dynamics else None
-    
+
+    # Group positions and flags by element symbol
     elements_positions_cartesian = {}
     elements_positions_direct = {}
     elements_species = {}
@@ -174,11 +270,13 @@ def mapping_elements(elements,
             elements_flags.setdefault(element, []).extend(
                 new_flags[position_index:position_index + count])
         position_index += count
-     
+
+    # Resolve canonical element order (prompts user if duplicates exist)
     if sort_elements is None:
         sort_elements = check_elements(elements)
-    
-    if sort_elements is not None:     
+
+    # Rebuild arrays in the resolved order
+    if sort_elements is not None:
         sort_positions_cartesian = []
         sort_positions_direct = []
         sort_species = []
@@ -191,40 +289,67 @@ def mapping_elements(elements,
             if selective_dynamics:
                 sort_flags.extend(elements_flags[element])
             sort_atom_counts.append(len(elements_positions_direct[element]))
-     
+
         new_positions_cartesian = np.array(sort_positions_cartesian, dtype=float)
         new_positions_direct = np.array(sort_positions_direct, dtype=float)
-        new_species = np.array(sort_species)
+        new_species = list(sort_species)
         if selective_dynamics:
             new_flags = np.array(sort_flags)
         new_atom_counts = sort_atom_counts
         new_elements = sort_elements
 
-    return {"elements": new_elements,
-            "atom_counts": new_atom_counts,
+    return {"elements":           new_elements,
+            "atom_counts":        new_atom_counts,
             "positions_cartesian": new_positions_cartesian,
-            "positions_direct": new_positions_direct,
-            "species": new_species,
-            "flags": new_flags if selective_dynamics else None}
+            "positions_direct":   new_positions_direct,
+            "species":            new_species,
+            "flags":              new_flags if selective_dynamics else None}
 
-def define_labels(elements,
-                  atom_counts):
-    
+
+def define_labels(elements, atom_counts):
+    """Generate per-atom labels used as comments in the POSCAR position block.
+
+    Labels take the form '<Symbol><index>' with the index zero-padded to the
+    width of the largest atom count plus one (e.g. 'Mo01', 'S003').
+
+    Parameters
+    ----------
+    elements    : list[str]  — element symbols in canonical order
+    atom_counts : list[int]  — number of atoms per element
+
+    Returns
+    -------
+    labels : list[str] — one label per atom in the same order as the position arrays
+    """
+
     digits = len(str(max(atom_counts))) + 1
-    labels = [f"{symbol}{str(counter).zfill(digits)}" for symbol, number in zip(elements, atom_counts)
+    labels = [f"{symbol}{str(counter).zfill(digits)}"
+              for symbol, number in zip(elements, atom_counts)
               for counter in range(1, number + 1)]
-    
+
     return labels
 
-def write_POSCAR(filepath,
-                 lattice_matrix,
-                 elements,
-                 atom_counts,
-                 positions_direct,
-                 selective_dynamics,
-                 flags,
-                 labels):
-    
+
+def write_POSCAR(filepath, lattice_matrix, elements, atom_counts,
+                 positions_direct, selective_dynamics, flags, labels):
+    """Write a VASP5-format POSCAR file with Direct coordinates.
+
+    The scale factor is always written as 1.0 because the lattice vectors
+    are already stored in absolute Å units. Atom labels are appended as
+    inline comments after each position line for readability.
+
+    Parameters
+    ----------
+    filepath           : str
+    lattice_matrix     : np.ndarray (3, 3)  — lattice vectors in Å
+    elements           : list[str]          — element symbols in canonical order
+    atom_counts        : list[int]          — atoms per element
+    positions_direct   : np.ndarray (N, 3)  — fractional coordinates
+    selective_dynamics : bool
+    flags              : np.ndarray or None  — per-atom T/F flags
+    labels             : list[str]          — per-atom comment labels
+    """
+
     with open(filepath, 'w') as o:
         o.write("Generated by vaspStack.py code\n")
         o.write(f"   {1.0:.14f}\n")
@@ -238,13 +363,31 @@ def write_POSCAR(filepath,
         if selective_dynamics:
             for position, flag, label in zip(positions_direct, flags, labels):
                 o.write(f"{position[0]:20.16f}{position[1]:20.16f}{position[2]:20.16f}"
-                        f"   {flag[0]:s}   {flag[1]:s}   {flag[2]:s}" + f"   {label:>6s}\n")
+                        f"   {flag[0]:s}   {flag[1]:s}   {flag[2]:s}"
+                        f"   {label:>6s}\n")
         else:
             for position, label in zip(positions_direct, labels):
                 o.write(f"{position[0]:20.16f}{position[1]:20.16f}{position[2]:20.16f}"
                         f"   {label:>6s}\n")
 
 def build_second_layer(positions_cartesian):
+    """Build the second layer by shifting a copy of the monolayer upward in z.
+
+    The vertical shift is set to the monolayer thickness plus a 3 Å interlayer
+    gap, placing the second layer directly above the first in Cartesian space.
+
+    Parameters
+    ----------
+    positions_cartesian : np.ndarray, shape (N, 3) — Cartesian coordinates of the
+                          monolayer in Å
+
+    Returns
+    -------
+    thickness                  : float             — layer thickness in Å
+                                 (max_z − min_z of the monolayer)
+    second_positions_cartesian : np.ndarray, shape (N, 3) — Cartesian coordinates
+                                 of the second layer in Å
+    """
     
     thickness = np.max(positions_cartesian[:, 2]) - np.min(positions_cartesian[:, 2])
     shift = thickness + 3.
@@ -255,6 +398,16 @@ def build_second_layer(positions_cartesian):
     return thickness, second_positions_cartesion
 
 def mirror_image(positions_cartesian):
+    """Reflect atomic positions in Cartesian space across a XY plane.
+
+    Parameters
+    ----------
+    positions_cartesian : np.ndarray, shape (N, 3) — Cartesian coordinates in Å
+
+    Returns
+    -------
+    new_positions_cartesian : np.ndarray, shape (N, 3) — reflected Cartesian coordinates in Å
+    """
     
     new_positions_cartesian = positions_cartesian.copy()
     new_positions_cartesian[:, 2] = np.max(positions_cartesian[:, 2]) + np.min(positions_cartesian[:, 2]) - positions_cartesian[:, 2]
@@ -262,6 +415,21 @@ def mirror_image(positions_cartesian):
     return new_positions_cartesian
 
 def unwrap(positions_direct):
+    """Reconstruct a contiguous cluster by unwrapping periodic boundary conditions.
+
+    Shifts all atoms into the minimum-image frame relative to atom[0], so that
+    atoms split across a cell boundary are treated as geometrically contiguous.
+    Interatomic distances are preserved exactly.
+
+    Parameters
+    ----------
+    positions_direct : np.ndarray (N, 3) — fractional coordinates in [0, 1)
+
+    Returns
+    -------
+    reference : np.ndarray (3,)   — fractional coordinate of atom[0]
+    unwrapped : np.ndarray (N, 3) — unwrapped fractional coordinates
+    """
     
     reference = np.copy(positions_direct[0])
     delta = positions_direct - reference
@@ -270,6 +438,21 @@ def unwrap(positions_direct):
     return reference, reference + delta
 
 def center_sheet(positions_direct):
+    """Shift a 2D sheet so the vacuum direction is centered at 0.5 and the
+    periodic directions start at origin.
+
+    Intended for 2D periodic systems (monolayers, slabs) where the structure
+    is periodic in two directions and has vacuum in one direction.
+    The user is prompted to select the vacuum direction.
+
+    Parameters
+    ----------
+    positions_direct : np.ndarray (N, 3) — fractional coordinates in [0, 1)
+
+    Returns
+    -------
+    np.ndarray (N, 3) — shifted fractional coordinates in [0, 1)
+    """
     
     reference, unwrapped = unwrap(positions_direct)
     center = np.mean(unwrapped, axis=0)
@@ -281,9 +464,93 @@ def center_sheet(positions_direct):
     
     return new % 1.0
 
-def shift_sheet(positions_direct,
-                shift_a,
-                shift_b):
+def get_2d_lattice_type(lattice_matrix):
+    """Classify the 2D Bravais lattice type from the in-plane lattice vectors.
+
+    Compares the in-plane lattice lengths (a, b) and the angle γ between them
+    to identify the crystal system according to the standard 2D classification:
+
+        square      : γ = 90°  and  a = b
+        rectangular : γ = 90°  and  a ≠ b
+        hexagonal   : γ = 60° or 120°  and  a = b
+        oblique     : all other cases
+
+    Parameters
+    ----------
+    lattice_matrix : np.ndarray, shape (3, 3) — row vectors of the lattice in Å
+
+    Returns
+    -------
+    str : one of 'square', 'rectangular', 'hexagonal', 'oblique'
+    """
+
+    length_a = np.linalg.norm(lattice_matrix[0])
+    length_b = np.linalg.norm(lattice_matrix[1])
+    gamma = np.degrees(np.arccos(np.clip(
+        np.dot(lattice_matrix[0], lattice_matrix[1]) /
+        (length_a * length_b), -1., 1.)))
+
+    if np.abs(gamma - 90.) < 1e-5:
+        return 'square' if np.abs(length_a - length_b) < 1e-8 else 'rectangular'
+    elif ((np.abs(gamma - 60.) < 1e-5 or np.abs(gamma - 120.) < 1e-5)
+          and np.abs(length_a - length_b) < 1e-8):
+        return 'hexagonal'
+    else:
+        return 'oblique'
+
+def get_shift_grid(lattice_type):
+    """Return the high-symmetry stacking shift points for the given 2D lattice type.
+
+    The shifts correspond to the irreducible high-symmetry points of the
+    stacking space for each 2D Bravais lattice:
+
+        square      : AA (0,0),  AB (1/2,0),    AC  (1/2,1/2)
+        rectangular : AA (0,0),  AB (1/2,0),    AB' (0,1/2),  AC   (1/2,1/2)
+        hexagonal   : AA (0,0),  AB (1/3,2/3),  AB' (2/3,1/3)
+        oblique     : AA (0,0),  AB (1/2,0),    AB' (0,1/2),  AC   (1/2,1/2)
+
+    Parameters
+    ----------
+    lattice_type : str — one of 'square', 'rectangular', 'hexagonal', 'oblique'
+
+    Returns
+    -------
+    shifts : list[tuple[float, float]] — (shift_a, shift_b) in fractional coordinates
+    """
+
+    if lattice_type == 'square':
+        return [(0.,     0.),
+                (1./2.,  0.),
+                (1./2.,  1./2.)]
+
+    elif lattice_type in ('rectangular', 'oblique'):
+        return [(0.,     0.),
+                (1./2.,  0.),
+                (0.,     1./2.),
+                (1./2.,  1./2.)]
+
+    elif lattice_type == 'hexagonal':
+        return [(0.,     0.),
+                (1./3.,  2./3.),
+                (2./3.,  1./3.)]
+
+def shift_sheet(positions_direct, shift_a, shift_b):
+    """Translate a sheet by a fractional shift along the a and b lattice directions.
+
+    The shift is applied directly to the fractional coordinates and wrapped
+    back into [0, 1) to maintain periodicity. This generates laterally displaced
+    stacking configurations for the bilayer grid.
+
+    Parameters
+    ----------
+    positions_direct : np.ndarray, shape (N, 3) — fractional coordinates in [0, 1)
+    shift_a          : float — fractional shift along the a direction
+    shift_b          : float — fractional shift along the b direction
+
+    Returns
+    -------
+    new : np.ndarray, shape (N, 3) — shifted fractional coordinates in [0, 1)
+    """
     
     new = positions_direct.copy()
     new[:, 0] += shift_a
@@ -292,12 +559,30 @@ def shift_sheet(positions_direct,
     
     return new
 
-def build_bilayer(atom_counts,
-                  first_positions_direct,
-                  second_positions_direct,
-                  species,
-                  selective_dynamics,
-                  flags):
+def build_bilayer(atom_counts, first_positions_direct, second_positions_direct, species, selective_dynamics, flags):
+    """Stack two monolayer sheets into a bilayer structure.
+
+    Concatenates the atomic positions of the first and second layers, then
+    centers the combined bilayer in the vacuum direction at z = 0.5 (fractional).
+    Atom counts and species lists are doubled to reflect both layers.
+
+    Parameters
+    ----------
+    atom_counts              : list[int]           — atoms per element in one layer
+    first_positions_direct   : np.ndarray (N, 3)   — fractional coordinates of layer 1
+    second_positions_direct  : np.ndarray (N, 3)   — fractional coordinates of layer 2
+    species                  : list[str]           — per-atom element labels for one layer
+    selective_dynamics       : bool                — whether Selective Dynamics is used
+    flags                    : np.ndarray or None  — per-atom T/F flags for one layer
+
+    Returns
+    -------
+    dict with keys:
+        atom_counts      : list[int]           — doubled atom counts
+        positions_direct : np.ndarray (2N, 3)  — centered fractional coordinates
+        species          : list[str]           — doubled per-atom species list
+        flags            : np.ndarray or None  — doubled T/F flags, or None
+    """
     
     new_atom_counts = atom_counts + atom_counts
     new_positions_direct = np.vstack((first_positions_direct, second_positions_direct))
@@ -314,17 +599,17 @@ def build_bilayer(atom_counts,
             "flags": new_flags if selective_dynamics else None}
 
 def main():
+    """Parse argument, build second layer, stack both layers, and write output files"""
     
     if '-h' in argv or '--help' in argv or len(argv) != 2:
         usage()
 
     working_dir = os.getcwd()
     monolayer = read_POSCAR(argv[1])
-    first_positions_direct = center_sheet(monolayer["positions_direct"])
     thickness, second_positions_cartesion = build_second_layer(monolayer["positions_cartesian"])
     if thickness > 1e-8:
         while True:
-            flip = input("Want to flip the second later (Y/N): ").strip().upper()
+            flip = input("Want to flip the second layer (Y/N): ").strip().upper()
             if flip[0] == 'Y':
                 second_positions_cartesion = mirror_image(second_positions_cartesion)
                 break
@@ -333,48 +618,27 @@ def main():
             else:
                 print("ERROR! Yes or No only.")
     
-    second_positions_direct = cartesian_to_direct(monolayer["lattice_matrix"],
-                                                  second_positions_cartesion)
+    second_positions_direct = cartesian_to_direct(monolayer["lattice_matrix"], second_positions_cartesion)
     bilayer_elements = monolayer["elements"] + monolayer["elements"]
     sort_elements = check_elements(bilayer_elements)
+    lattice_type = get_2d_lattice_type(monolayer["lattice_matrix"])
+    print(f"Detected 2D lattice type: {lattice_type}")
+    shifts = get_shift_grid(lattice_type)
     
-    for i in range(10):
-        for j in range(10):
-            shift_a = i / 10.
-            shift_b = j / 10.
-            shift_positions_direct = shift_sheet(second_positions_direct,
-                                                 shift_a,
-                                                 shift_b)
-            bilayer = build_bilayer(monolayer["atom_counts"],
-                                    first_positions_direct,
-                                    shift_positions_direct,
-                                    monolayer["species"],
-                                    monolayer["selective_dynamics"],
-                                    monolayer["flags"])
-            bilayer_positions_cartesion = direct_to_cartesian(monolayer["lattice_matrix"],
-                                                              bilayer["positions_direct"])
-            mapping = mapping_elements(bilayer_elements,
-                                       bilayer["atom_counts"],
-                                       bilayer_positions_cartesion,
-                                       bilayer["positions_direct"],
-                                       bilayer["species"],
-                                       monolayer["selective_dynamics"],
-                                       bilayer["flags"],
-                                       sort_elements)
-            labels = define_labels(mapping["elements"],
-                                   mapping["atom_counts"])
-            output_dir = os.path.join(working_dir, f"stack_a{shift_a:.1f}_b{shift_b:.1f}")
+    for shift_a, shift_b in shifts:
+            shift_positions_direct = shift_sheet(second_positions_direct, shift_a, shift_b)
+            bilayer = build_bilayer(monolayer["atom_counts"], monolayer["positions_direct"], shift_positions_direct,
+                                    monolayer["species"], monolayer["selective_dynamics"], monolayer["flags"])
+            bilayer_positions_cartesion = direct_to_cartesian(monolayer["lattice_matrix"], bilayer["positions_direct"])
+            mapping = mapping_elements(bilayer_elements, bilayer["atom_counts"], bilayer_positions_cartesion, bilayer["positions_direct"],
+                                       bilayer["species"], monolayer["selective_dynamics"], bilayer["flags"], sort_elements)
+            labels = define_labels(mapping["elements"], mapping["atom_counts"])
+            output_dir = os.path.join(working_dir, f"stack_a{shift_a:.3f}_b{shift_b:.3f}")
             os.makedirs(output_dir, exist_ok=True)
             output_path = os.path.join(output_dir, "POSCAR")
-            write_POSCAR(output_path,
-                         monolayer["lattice_matrix"],
-                         mapping["elements"],
-                         mapping["atom_counts"],
-                         mapping["positions_direct"],
-                         monolayer["selective_dynamics"],
-                         mapping["flags"],
-                         labels)
-    print("Written 100 POSCARs Finished!\n")
+            write_POSCAR(output_path, monolayer["lattice_matrix"], mapping["elements"], mapping["atom_counts"],
+                         mapping["positions_direct"], monolayer["selective_dynamics"], mapping["flags"], labels)
+    print(f"Written {len(shifts)} POSCARs Finished!\n")
 
 if __name__ == "__main__":
     main()
