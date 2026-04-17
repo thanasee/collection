@@ -5,6 +5,7 @@ import os
 import numpy as np
 from ase.io import read
 
+
 def usage():
     """Print usage information and exit."""
     text = """
@@ -17,6 +18,7 @@ This script was developed by Thanasee Thanasarnsurapong.
 """
     print(text)
     exit(0)
+
 
 def read_structure(poscar_file):
     """Read atomic structure from a POSCAR file using ASE.
@@ -37,6 +39,7 @@ def read_structure(poscar_file):
         exit(0)
 
     return read(poscar_file)
+
 
 def read_piezo_stress(outcar_file):
     """Read the piezoelectric stress tensor from a VASP OUTCAR file.
@@ -87,6 +90,7 @@ def read_piezo_stress(outcar_file):
 
     return outcar_lines, piezostress_coef
 
+
 def read_elastic_tensor(outcar_lines):
     """Read the elastic stiffness tensor from VASP OUTCAR lines.
  
@@ -129,6 +133,7 @@ def read_elastic_tensor(outcar_lines):
 
     return moduli_index, elastic_coef
 
+
 def read_elastic_from_file():
     """Read the elastic stiffness tensor from a local 'Elastic.dat' file.
  
@@ -162,6 +167,7 @@ def read_elastic_from_file():
     else:
         print("Your input elastic file was probably wrong.")
         exit(0)
+
 
 def read_elastic_manual():
     """Prompt the user to enter the elastic stiffness tensor manually.
@@ -198,6 +204,7 @@ C16 C26 C36 C46 C56 C66""")
         else:
             print("Error! Input must be 9 or 36 components.")
 
+
 def get_elastic_tensor(outcar_lines):
     """Obtain the elastic stiffness tensor using a three-level fallback chain.
  
@@ -233,6 +240,7 @@ def get_elastic_tensor(outcar_lines):
         elastic_coef = read_elastic_manual()
 
     return None, elastic_coef
+
 
 def compute_piezo_2d(structure, piezostress_coef, elastic_coef, moduli_index):
     """Compute the 2D piezoelectric stress tensor and elastic tensor for a 2D material.
@@ -296,6 +304,7 @@ def compute_piezo_2d(structure, piezostress_coef, elastic_coef, moduli_index):
 
     return piezostress_2d, elastic_2d, factor_2d
 
+
 def check_stability_2d(elastic_2d, factor_2d):
     """Check the mechanical stability of a 2D material from its elastic tensor.
  
@@ -318,6 +327,7 @@ def check_stability_2d(elastic_2d, factor_2d):
     else:
         print("This material is mechanically unstable!!")
         exit(0)
+
 
 def write_elastic_2d(elastic_2d):
     """Write the 2D elastic stiffness tensor to file and print to screen.
@@ -356,6 +366,7 @@ def write_elastic_2d(elastic_2d):
     print(f"   {C11:>11.4f} {C12:>11.4f} {C16:>11.4f}")
     print(f"   {C12:>11.4f} {C22:>11.4f} {C26:>11.4f}")
     print(f"   {C16:>11.4f} {C26:>11.4f} {C66:>11.4f}\n")
+
 
 def write_piezostress_2d(piezostress_2d):
     """Write the 2D piezoelectric stress tensor to file and print to screen.
@@ -397,6 +408,7 @@ def write_piezostress_2d(piezostress_2d):
     print(f"   {e21:>11.4f} {e22:>11.4f} {e26:>11.4f}")
     print(f"   {e31:>11.4f} {e32:>11.4f} {e36:>11.4f}\n")
 
+
 def write_piezostrain_2d(piezostrain_2d):
     """Write the 2D piezoelectric strain tensor to file and print to screen.
  
@@ -436,6 +448,7 @@ def write_piezostrain_2d(piezostrain_2d):
     print(f"   {d21:>11.4f} {d22:>11.4f} {d26:>11.4f}")
     print(f"   {d31:>11.4f} {d32:>11.4f} {d36:>11.4f}\n")
 
+
 def run_2d(structure, piezostress_coef, elastic_coef, moduli_index):
     """Run the full 2D piezoelectric calculation pipeline.
  
@@ -473,6 +486,7 @@ def run_2d(structure, piezostress_coef, elastic_coef, moduli_index):
 
     write_piezostrain_2d(piezostrain_2d)
 
+
 def compute_piezo_3d(piezostress_coef, elastic_coef):
     """Validate and prepare the 3D piezoelectric and elastic tensors.
  
@@ -506,6 +520,7 @@ def compute_piezo_3d(piezostress_coef, elastic_coef):
 
     return piezostress_3d, elastic_3d
 
+
 def check_stability_3d(elastic_3d):
     """Check the mechanical stability of a 3D material from its elastic tensor.
 
@@ -523,6 +538,7 @@ def check_stability_3d(elastic_3d):
     else:
         print("This material is mechanically unstable!!")
         exit(0)
+
 
 def write_elastic_3d(elastic_3d):
     """Write the 3D elastic stiffness tensor to file and print to screen.
@@ -565,6 +581,7 @@ def write_elastic_3d(elastic_3d):
         print("   " + " ".join(f"{C[i, j]:>11.4f}" for j in range(6)))
     print()
 
+
 def write_piezostress_3d(piezostress_3d):
     """Write the 3D piezoelectric stress tensor to file and print to screen.
  
@@ -601,6 +618,7 @@ def write_piezostress_3d(piezostress_3d):
     for i in range(3):
         print("   " + " ".join(f"{E[i, j]:>11.4f}" for j in range(6)))
     print()
+
 
 def write_piezostrain_3d(piezostrain_3d):
     """Write the 3D piezoelectric strain tensor to file and print to screen.
@@ -639,6 +657,7 @@ def write_piezostrain_3d(piezostrain_3d):
         print("   " + " ".join(f"{D[i, j]:>11.4f}" for j in range(6)))
     print()
 
+
 def run_3d(piezostress_coef, elastic_coef):
     """Run the full 3D piezoelectric calculation pipeline.
  
@@ -672,6 +691,7 @@ def run_3d(piezostress_coef, elastic_coef):
 
     write_piezostrain_3d(piezostrain_3d)
 
+
 def main():
     """Parse arguments, read inputs, and dispatch to 2D or 3D analysis."""
 
@@ -699,6 +719,7 @@ def main():
                 print("Warning! Wrong input")
         else:
             print("Warning! Wrong input")
+
 
 if __name__ == '__main__':
     main()
