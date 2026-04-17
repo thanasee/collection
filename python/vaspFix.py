@@ -4,6 +4,7 @@ from sys import argv, exit
 import os
 import numpy as np
 
+
 def usage():
     """Print usage information and exit."""
     text = """
@@ -16,6 +17,7 @@ This script was developed by Thanasee Thanasarnsurapong.
 """
     print(text)
     exit(0)
+
 
 def read_POSCAR(filepath):
     """Read a VASP POSCAR file and return its contents as a dictionary.
@@ -369,6 +371,7 @@ def write_POSCAR(filepath, lattice_matrix, elements, atom_counts,
                 o.write(f"{position[0]:20.16f}{position[1]:20.16f}{position[2]:20.16f}"
                         f"   {label:>6s}\n")
 
+
 def refix(total_atoms, selective_dynamics, flags):
     """Initialise Selective Dynamics flags and ask how to proceed when they already exist.
  
@@ -415,6 +418,7 @@ Selective Dynamics already present in input
                 print("ERROR! Enter Y, A, or N.")
     return flags, skip
 
+
 def select_index(total_atoms, species):
     """Prompt the user to select atoms by element symbol and/or atom index.
  
@@ -458,6 +462,7 @@ Input element-symbol and/or atom-indexes to choose ({1:>3} to {total_atoms:>3})
             break
  
     return selected_atoms
+
 
 def select_radius(lattice_matrix, total_atoms, positions_cartesian):
     """Select atoms that lie outside a cutoff radius from a reference point.
@@ -527,6 +532,7 @@ Input atom-indexes of molecule (Free-format input, e.g., 1 3 1-4): """)
  
     return selected_atoms
 
+
 def select_file(total_atoms):
     """Read Selective Dynamics flags from a SELECTED_FIX_ATOMS_LIST file.
  
@@ -558,6 +564,7 @@ def select_file(total_atoms):
         else:
             print("ERROR! The numbers of atom in SELECTED_FIX_ATOMS_LIST and POSCAR files not match!")
             select_file = input("Enter your SELECTED_FIX_ATOMS_LIST path: ")
+
 
 def select_direction():
     """Prompt the user to choose which Cartesian directions to fix.
@@ -652,6 +659,7 @@ Choices of fixing atoms method
  
     return flags
 
+
 def write_selected(flags, labels):
     """Write the SELECTED_FIX_ATOMS_LIST file summarising the current fix status.
  
@@ -671,6 +679,7 @@ def write_selected(flags, labels):
         for i in range(len(flags)):
             o.write(f"{i + 1:5}   {labels[i]}    {flags[i, 0]}  {flags[i, 1]}  {flags[i, 2]}\n")
 
+
 def main():
     """Parse arguments, fix selected atoms, and write outputs."""
     
@@ -683,11 +692,12 @@ def main():
         flags = fix_mode(poscar["lattice_matrix"], poscar["total_atoms"], poscar["positions_cartesian"],
                          poscar["species"], flags)
     mapping = mapping_elements(poscar["elements"], poscar["atom_counts"], poscar["positions_direct"],
-                               poscar["positions_cartesian"], True, flags)
+                               poscar["positions_cartesian"], poscar["species"], True, flags)
     labels = define_labels(mapping["elements"], mapping["atom_counts"])
     write_POSCAR(argv[2], poscar["lattice_matrix"], mapping["elements"], mapping["atom_counts"],
                  mapping["positions_direct"], True, mapping["flags"], labels)
     write_selected(mapping["flags"], labels)
  
+    
 if __name__ == "__main__":
     main()
