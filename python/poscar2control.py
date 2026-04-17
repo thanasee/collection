@@ -4,6 +4,7 @@ from sys import argv, exit
 import os
 import numpy as np
 
+
 def usage():
     """Print usage information and exit."""
     
@@ -16,6 +17,7 @@ This script was developed by Thanasee Thanasarnsurapong.
 """
     print(text)
     exit(0)
+
 
 def read_POSCAR(filepath):
     """Read a VASP POSCAR file and return its contents as a dictionary.
@@ -137,6 +139,7 @@ def read_POSCAR(filepath):
             "selective_dynamics": selective_dynamics,
             "flags":              flags if selective_dynamics else None}
 
+
 def direct_to_cartesian(lattice_matrix, positions_direct):
     """Convert fractional (Direct) coordinates to Cartesian coordinates.
 
@@ -176,6 +179,7 @@ def cartesian_to_direct(lattice_matrix, positions_cartesian):
     positions_direct = np.dot(positions_cartesian, np.linalg.inv(lattice_matrix)) % 1.0
 
     return positions_direct
+
 
 def get_vacuum_index():
     """
