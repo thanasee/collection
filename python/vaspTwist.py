@@ -152,7 +152,6 @@ def read_POSCAR(filepath):
             "selective_dynamics": selective_dynamics,
             "flags":              flags if selective_dynamics else None}
 
-
 def direct_to_cartesian(lattice_matrix, positions_direct):
     """Convert fractional (Direct) coordinates to Cartesian coordinates.
 
@@ -173,7 +172,6 @@ def direct_to_cartesian(lattice_matrix, positions_direct):
 
     return positions_cartesian
 
-
 def cartesian_to_direct(lattice_matrix, positions_cartesian):
     """Convert Cartesian coordinates to fractional (Direct) coordinates.
 
@@ -192,7 +190,6 @@ def cartesian_to_direct(lattice_matrix, positions_cartesian):
     positions_direct = np.dot(positions_cartesian, np.linalg.inv(lattice_matrix)) % 1.0
 
     return positions_direct
-
 
 def check_elements(elements):
     """Check for duplicate element symbols and prompt the user for a canonical order.
@@ -227,7 +224,6 @@ def check_elements(elements):
             print("ERROR! The species do not match the unique elements. Try again.")
     else:
         return None
-
 
 def mapping_elements(elements, atom_counts, positions_cartesian, positions_direct,
                      species, selective_dynamics, flags, sort_elements=None):
@@ -946,11 +942,12 @@ def main():
 
     num_cores = mp.cpu_count()
     with mp.Pool(processes=num_cores) as pool:
-        per_theta_results = pool.starmap( build_candidates_for_theta, [(theta_key, vec_list, monolayer["lattice_matrix"],
-                                                                        monolayer["positions_cartesian"], monolayer["species"],
-                                                                        monolayer["selective_dynamics"], monolayer["flags"],
-                                                                        sort_elements, known_elements) 
-                                                                       for theta_key, vec_list in vectors_by_theta.items()])
+        per_theta_results = pool.starmap( build_candidates_for_theta,
+                                         [(theta_key, vec_list, monolayer["lattice_matrix"],
+                                           monolayer["positions_cartesian"], monolayer["species"],
+                                           monolayer["selective_dynamics"], monolayer["flags"],
+                                           sort_elements, known_elements) 
+                                          for theta_key, vec_list in vectors_by_theta.items()])
 
     candidates = [c for theta_list in per_theta_results for c in theta_list]
 
