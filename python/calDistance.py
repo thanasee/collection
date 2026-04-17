@@ -18,6 +18,7 @@ and developed by Thanasee Thanasarnsurapong.
     print(text)
     exit(0)
 
+
 def read_POSCAR(filepath):
     """Read and parse a VASP POSCAR/CONTCAR file.
 
@@ -135,6 +136,7 @@ def read_POSCAR(filepath):
             "selective_dynamics": selective_dynamics,
             "flags": flags if selective_dynamics else None}
 
+
 def direct_to_cartesian(lattice_matrix, positions_direct):
     """Convert fractional (direct) coordinates to Cartesian coordinates.
 
@@ -153,6 +155,7 @@ def direct_to_cartesian(lattice_matrix, positions_direct):
     
     return positions_cartesian
 
+
 def cartesian_to_direct(lattice_matrix, positions_cartesian):
     """Convert Cartesian coordinates to fractional (direct) coordinates.
 
@@ -169,6 +172,7 @@ def cartesian_to_direct(lattice_matrix, positions_cartesian):
     positions_direct = np.dot(positions_cartesian, np.linalg.inv(lattice_matrix)) % 1.0
     
     return positions_direct
+
 
 def check_elements(elements):
     """Check for duplicate element symbols and prompt the user for a canonical order.
@@ -295,6 +299,7 @@ def mapping_elements(elements, atom_counts, positions_cartesian, positions_direc
             "species":            new_species,
             "flags":              new_flags if selective_dynamics else None}
 
+
 def define_labels(elements, atom_counts):
     """Generate atom labels in the form 'Fe001', 'Fe002', ..., 'C001', etc.
 
@@ -316,6 +321,7 @@ def define_labels(elements, atom_counts):
               for counter in range(1, number + 1)]
     
     return labels
+
 
 def compute_image_offsets(lattice_matrix):
     """Pre-compute all 27 periodic image translation vectors.
@@ -339,6 +345,7 @@ def compute_image_offsets(lattice_matrix):
     
     return np.dot(klm, lattice_matrix)
 
+
 def min_image_distance(position_i, position_j, image_offsets):
     """Compute the minimum-image distance between two atomic positions.
 
@@ -360,6 +367,7 @@ def min_image_distance(position_i, position_j, image_offsets):
     diff_offset = diff[np.newaxis, :] + image_offsets # (27, 3)
     
     return np.linalg.norm(diff_offset, axis=1).min()
+
 
 def min_image_distances(position_reference, positions_others, image_offsets):
     """Compute minimum-image distances from one reference atom to many others.
@@ -385,6 +393,7 @@ def min_image_distances(position_reference, positions_others, image_offsets):
     diff_offset = diff[:, np.newaxis, :] + image_offsets[np.newaxis, :, :] # (N, 27, 3)
     
     return np.linalg.norm(diff_offset, axis=2).min(axis=1)              # (N,)
+
 
 def parse_group(prompt, total_atoms, species, allow_all=True):
     """Interactively parse a free-format atom selection from the user.
@@ -433,6 +442,7 @@ def parse_group(prompt, total_atoms, species, allow_all=True):
             return group
         print("  Wrong input atom-indexes! TRY AGAIN!")
 
+
 def one_to_all(total_atoms, positions_cartesian, labels, image_offsets):
     """Method 1: compute distances from one selected atom to all other atoms.
 
@@ -477,6 +487,7 @@ def one_to_all(total_atoms, positions_cartesian, labels, image_offsets):
             a1, a2 = pair[i]
             o.write(f"  {a1:>5s}  {a2:>5s}  {min_distances[i]:>12.8f}\n")
         o.write(f"      Average   {np.mean(min_distances):>12.8f}\n")
+
 
 def atom_pairs(total_atoms, positions_cartesian, labels, image_offsets):
     """Method 2: compute distances between user-specified atom pairs.
@@ -529,6 +540,7 @@ def atom_pairs(total_atoms, positions_cartesian, labels, image_offsets):
         for (a1, a2), min_distance in zip(pair, distances):
             o.write(f"  {a1:>5s}  {a2:>5s}  {min_distance:>12.8f}\n")
         o.write(f"      Average   {np.mean(distances):>12.8f}\n")
+
 
 def atom_molecule(total_atoms, positions_cartesian, species, labels, image_offsets):
     """Method 3: compute distances from selected atoms to molecule centroids.
@@ -585,6 +597,7 @@ def atom_molecule(total_atoms, positions_cartesian, species, labels, image_offse
         for (atom, mol), min_distance in zip(pair, distances):
             o.write(f"  {atom:>5s}  {mol:>5s}  {min_distance:>12.8f}\n")
         o.write(f"      Average   {np.mean(distances):>12.8f}\n")
+
 
 def z_distance(total_atoms, positions, species):
     """Method 4: compute the z-axis distance between substrate top and adsorbent bottom.
@@ -645,6 +658,7 @@ def z_distance(total_atoms, positions, species):
     distance = np.abs(lowest_adsorbent[2] - highest_substrate[2])
     print(f"Distance along z-axis is {distance:>12.8f} Angstrom.")
 
+
 def main():
     """Parse arguments, read POSCAR, calculate distance by selected method, write output files."""
 
@@ -680,6 +694,7 @@ Choices of calculating distance
             break
         else:
             print("ERROR! Wrong choice")
+
 
 if __name__ == "__main__":
     main()
