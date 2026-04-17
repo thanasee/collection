@@ -7,6 +7,7 @@ from ase.io import read
 from ase.spacegroup.symmetrize import check_symmetry
 from scipy.constants import Avogadro, h, k
 
+
 def usage():
     """Print usage information and exit."""
     
@@ -22,6 +23,7 @@ This script was developed by Thanasee Thanasarnsurapong.
 """
     print(text)
     exit(0)
+
 
 def read_structure(poscar_file):
     """Read atomic structure from a POSCAR file using ASE.
@@ -42,6 +44,7 @@ def read_structure(poscar_file):
         exit(0)
         
     return read(poscar_file)
+
 
 def read_elastic_tensor(outcar_file):
     """Read and parse the elastic tensor from a VASP OUTCAR file.
@@ -87,6 +90,7 @@ def read_elastic_tensor(outcar_file):
     
     return elastic_coef
 
+
 def get_2d_lattice_type(structure):
     """Determine the 2D lattice type from cell parameters.
  
@@ -114,6 +118,7 @@ def get_2d_lattice_type(structure):
         return 'hexagonal'
     else:
         return 'oblique'
+
 
 def compute_elastic_2d(structure, elastic_coef):
     """Extract the 2D elastic tensor from the 3D VASP elastic tensor.
@@ -165,6 +170,7 @@ def compute_elastic_2d(structure, elastic_coef):
     
     return elastic_2d, C11, C22, C12, C66, C16, C26, factor_2d
 
+
 def write_elastic_2d(C11, C22, C12, C66, C16, C26):
     """Print and write the 2D elastic tensor to Elastic.dat.
  
@@ -215,6 +221,7 @@ def check_stability_2d(elastic_2d, factor_2d):
     else:
         print("This material is mechanically unstable!!")
         exit(0)
+
 
 def compute_directional_properties_2d(elastic_2d):
     """Compute angle-dependent mechanical properties of a 2D material.
@@ -272,6 +279,7 @@ def compute_directional_properties_2d(elastic_2d):
     
     return degrees, young_modulus, poisson_ratio, shear_modulus
 
+
 def write_directional_properties_2d(degrees, young_modulus, poisson_ratio, shear_modulus):
     """Write angle-dependent mechanical properties to output files.
  
@@ -314,6 +322,7 @@ def write_directional_properties_2d(degrees, young_modulus, poisson_ratio, shear
         for dg, g in zip(degrees, shear_modulus):
             o.write(f" {dg:>6.1f}      {g:>12.8f}\n")
 
+
 def run_2d(structure, elastic_coef):
     """Run the full 2D mechanical analysis pipeline.
  
@@ -334,6 +343,7 @@ def run_2d(structure, elastic_coef):
     check_stability_2d(elastic_2d, factor_2d)
     degrees, young_modulus, poisson_ratio, shear_modulus = compute_directional_properties_2d(elastic_2d)
     write_directional_properties_2d(degrees, young_modulus, poisson_ratio, shear_modulus)
+
 
 def get_crystal_system(structure):
     """Determine the crystal system from the spacegroup number.
@@ -375,6 +385,7 @@ def get_crystal_system(structure):
     else:
         return 'Triclinic'
 
+
 def write_elastic_3d(elastic_3d):
     """Print and write the full 3D elastic tensor to Elastic.dat.
  
@@ -412,6 +423,7 @@ def write_elastic_3d(elastic_3d):
         print("   " + " ".join(f"{C[i, j]:>11.4f}" for j in range(6)))
     print()
 
+
 def check_stability_3d(elastic_3d):
     """Check mechanical stability of a 3D material via eigenvalue criterion.
  
@@ -428,6 +440,7 @@ def check_stability_3d(elastic_3d):
     else:
         print("This material is mechanically unstable!!")
         exit(0)
+
 
 def compute_mechanical_properties_3d(elastic_3d, structure):
     """Compute bulk mechanical properties of a 3D material.
@@ -516,6 +529,7 @@ def compute_mechanical_properties_3d(elastic_3d, structure):
        'anisotropy_1': anisotropy_1, 'anisotropy_2': anisotropy_2, 'anisotropy_3': anisotropy_3
        }
 
+
 def print_and_write_mechanical_properties_3d(props):
     """Print and write mechanical properties and anisotropy indices to output files.
  
@@ -594,6 +608,7 @@ def print_and_write_mechanical_properties_3d(props):
         o.write(f"(010) Planar Shear Anisotropy (A_2): {A2:>10.4f}\n")
         o.write(f"(001) Planar Shear Anisotropy (A_3): {A3:>10.4f}\n")
 
+
 def run_3d(structure, elastic_coef):
     """Run the full 3D mechanical analysis pipeline.
  
@@ -618,6 +633,7 @@ def run_3d(structure, elastic_coef):
     
     props = compute_mechanical_properties_3d(elastic_3d, structure)
     print_and_write_mechanical_properties_3d(props)
+
 
 def main():
     """Parse arguments, read inputs, and dispatch to 2D or 3D analysis."""
@@ -644,6 +660,7 @@ def main():
                 print("Warning! Wrong input")
         else:
             print("Warning! Wrong input")
+
 
 if __name__ == '__main__':
     main()
