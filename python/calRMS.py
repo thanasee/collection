@@ -4,6 +4,7 @@ from sys import argv, exit
 import os
 import numpy as np
 
+
 def usage():
     """Print usage information and exit."""
 
@@ -17,6 +18,7 @@ This script was developed by Thanasee Thanasarnsurapong.
 """
     print(text)
     exit(0)
+
 
 def read_POSCAR(filepath):
     """Read and parse a VASP POSCAR/CONTCAR file.
@@ -135,6 +137,7 @@ def read_POSCAR(filepath):
             "selective_dynamics": selective_dynamics,
             "flags": flags if selective_dynamics else None}
 
+
 def direct_to_cartesian(lattice_matrix, positions_direct):
     """Convert fractional (direct) coordinates to Cartesian coordinates.
 
@@ -153,6 +156,7 @@ def direct_to_cartesian(lattice_matrix, positions_direct):
     
     return positions_cartesian
 
+
 def cartesian_to_direct(lattice_matrix, positions_cartesian):
     """Convert Cartesian coordinates to fractional (direct) coordinates.
 
@@ -169,6 +173,7 @@ def cartesian_to_direct(lattice_matrix, positions_cartesian):
     positions_direct = np.dot(positions_cartesian, np.linalg.inv(lattice_matrix)) % 1.0
     
     return positions_direct
+
 
 def check_elements(elements):
     """Check for duplicate element symbols and prompt the user for a canonical order.
@@ -295,6 +300,7 @@ def mapping_elements(elements, atom_counts, positions_cartesian, positions_direc
             "species":            new_species,
             "flags":              new_flags if selective_dynamics else None}
 
+
 def define_labels(elements, atom_counts):
     """Generate atom labels in the form 'Fe001', 'Fe002', ..., 'C001', etc.
 
@@ -316,6 +322,7 @@ def define_labels(elements, atom_counts):
               for counter in range(1, number + 1)]
     
     return labels
+
 
 def read_FORCE_CONSTANTS(filepath, total_atoms):
     """Read and parse a phonopy/phono3py FORCE_CONSTANTS file.
@@ -366,6 +373,7 @@ def read_FORCE_CONSTANTS(filepath, total_atoms):
             "pair_list": pair_list,
             "rms": rms}
 
+
 def compute_image_offsets(lattice_matrix):
     """Compute Cartesian offset vectors for all 27 periodic images.
 
@@ -387,6 +395,7 @@ def compute_image_offsets(lattice_matrix):
                                for m in range(-1, 2)])   # (27, 3)
     
     return np.dot(klm, lattice_matrix)
+
 
 def calculate_distance_rms(lattice_matrix, total_atoms, positions_cartesian, image_offsets,
                            pair_list, rms, labels):
@@ -440,6 +449,7 @@ def calculate_distance_rms(lattice_matrix, total_atoms, positions_cartesian, ima
 
     return distance_rms
 
+
 def write_output(elements, distance_rms):
     """Write distance vs RMS data to element-pair output files.
 
@@ -468,6 +478,7 @@ def write_output(elements, distance_rms):
                         (pair[1] in item[0] and pair[0] in item[1])):
                     o.write(f"  {item[2]:>12.8f}  {item[3]:>12.8f}\n")
 
+
 def main():
     """Parse arguments, calculate distance and IFC RMS, and write outputs."""
 
@@ -483,6 +494,7 @@ def main():
     distance_rms = calculate_distance_rms(poscar["lattice_matrix"], poscar["total_atoms"], mapping["positions_cartesian"],
                                           image_offsets, force_constants["pair_list"], force_constants["rms"], labels)
     write_output(mapping["elements"], distance_rms)
+
 
 if __name__ == "__main__":
     main()
