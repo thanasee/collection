@@ -3,6 +3,7 @@ from sys import argv, exit
 import os
 import numpy as np
 
+
 def usage():
     """Print usage information and exit."""
     text = """
@@ -15,6 +16,7 @@ This script was developed by Thanasee Thanasarnsurapong.
 """
     print(text)
     exit(0)
+
 
 def read_files(input_file):
     """
@@ -35,6 +37,7 @@ def read_files(input_file):
         exit(1)
     with open(input_file, 'r') as f:
         return f.readlines()
+
 
 def parse_lines(log_lines, keyword):
     """
@@ -60,6 +63,7 @@ def parse_lines(log_lines, keyword):
         print(f"ERROR! No {keyword} data found. Is this a valid ML_LOGFILE?")
         exit(1)
     return data
+
 
 def write_beef(beef_lines, filename="BEEF.dat"):
     """
@@ -88,6 +92,7 @@ def write_beef(beef_lines, filename="BEEF.dat"):
             o.write(f"  {int(line[0]):>5.0f}   {float(line[1]):>14.8E}   {float(line[2]):>14.8E}   {float(line[3]):>14.8E}   "
                     f"{float(line[4]):>14.8E}   {float(line[5]):>14.8E}   {float(line[6]):>14.8E}\n")
 
+
 def write_err(err_lines, filename="ERR.dat"):
     """
     Write Root Mean Square Error (RMSE) data to an output file.
@@ -110,6 +115,7 @@ def write_err(err_lines, filename="ERR.dat"):
         for line in err_lines:
             o.write(f"  {int(line[0]):>5.0f}   {float(line[1]):>14.8E}   {float(line[2]):>14.8E}   {float(line[3]):>14.8E}\n")
 
+
 def main():
     """
     Parses arguments, reads the ML_LOGFILE, extracts BEEF and ERR data, and writes output files.
@@ -124,6 +130,7 @@ def main():
     write_beef(beef_lines)
     write_err(err_lines)
     print("Done! Output written to BEEF.dat and ERR.dat")
+
 
 if __name__ == '__main__':
     main()
