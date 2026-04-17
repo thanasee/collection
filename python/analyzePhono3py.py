@@ -6,6 +6,7 @@ import subprocess
 import numpy as np
 import h5py as h5
 
+
 def usage():
     """Print usage information and exit."""
     text = """
@@ -18,6 +19,7 @@ This script was developed by Thanasee Thanasarnsurapong.
 """
     print(text)
     exit(0)
+
 
 def read_kappa(file, key, threshold=None, abs_value=False):
     """Read a dataset from an open HDF5 file and optionally suppress numerical noise.
