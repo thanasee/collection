@@ -4,6 +4,7 @@ from sys import argv, exit
 import os
 import numpy as np
 
+
 def usage():
     """Print usage information and exit."""
     
@@ -21,6 +22,7 @@ and developed by Thanasee Thanasarnsurapong.
 """
     print(text)
     exit(0)
+
 
 def read_POSCAR(filepath):
     """Read a VASP POSCAR file and return its contents as a dictionary.
@@ -374,6 +376,7 @@ def write_POSCAR(filepath, lattice_matrix, elements, atom_counts,
                 o.write(f"{position[0]:20.16f}{position[1]:20.16f}{position[2]:20.16f}"
                         f"   {label:>6s}\n")
 
+
 def selection_atoms(prompt, total_atoms, species):
     """Parse free-format atom selection input and return a list of 0-based indexes.
 
@@ -409,6 +412,7 @@ def selection_atoms(prompt, total_atoms, species):
             return selected
         print("Wrong input atom-indexes! TRY AGAIN!")
 
+
 def input_direct(lattice_matrix):
     """Prompt the user for a position in fractional (a, b) coordinates and convert to Cartesian.
 
@@ -434,6 +438,7 @@ def input_direct(lattice_matrix):
     coords.append(0.0)
 
     return np.dot(coords, lattice_matrix)
+
 
 def place_ontop(lattice_matrix_substrate, total_atoms_substrate, total_atoms_adsorbent, positions_substrate,
                 positions_adsorbent, species_substrate, species_adsorbent, selective_dynamics,
@@ -567,6 +572,7 @@ Choices of positioning adsorbent for adsorbent {n+1:>2}
             "species_adsorbent": np.vstack(new_species_adsorbent),
             "flags_adsorbent": np.vstack(new_flags_adsorbent) if selective_dynamics else None}
 
+
 def place_around(lattice_matrix_substrate, total_atoms_substrate, positions_substrate, positions_adsorbent,
                  species_substrate, species_adsorbent, selective_dynamics, flags_adsorbent, number_adsorbent,
                  delta):
@@ -668,6 +674,7 @@ Choices of define initial adsorption site
             "species_adsorbent": np.vstack(new_species_adsorbent),
             "flags_adsorbent": np.vstack(new_flags_adsorbent) if selective_dynamics else None}
 
+
 def rotation_matrix(i, angle_step):
     """Construct a rotation matrix for rotation about the z-axis.
 
@@ -696,6 +703,7 @@ def rotation_matrix(i, angle_step):
     rotate = cos * np.eye(3) + sin * np.cross(np.eye(3), u) + (1 - cos) * np.outer(u, u)
     
     return rotate
+
 
 def select_direction():
     """Prompt the user to select which Cartesian directions to fix in Selective Dynamics.
@@ -738,6 +746,7 @@ Input the direction index to fix (1 to 3):
             return fix_coordinates
         else:
             print("ERROR! Directions must be between 1 and 3. Try again.")
+
 
 def main():
     """
@@ -844,6 +853,7 @@ f"(Free-format input, e.g., 1 3 1-4 C H all)")
     print("-" * 49)
     print(f"  Total    |  {substrate['total_atoms']:<11}|  {new_total_atoms_adsorbent:<11}|  {total_atoms}")
     print("-" * 49 + "\n")
+
 
 if __name__ == "__main__":
     main()
