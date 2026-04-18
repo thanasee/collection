@@ -376,7 +376,7 @@ def write_POSCAR(filepath, lattice_matrix, elements, atom_counts,
 def build_second_layer(positions_cartesian):
     """Build the second layer by shifting a copy of the monolayer upward in z.
 
-    The vertical shift is set to the monolayer thickness plus a 3 Å interlayer
+    The vertical shift is set to the monolayer thickness plus a 5 Å interlayer
     gap, placing the second layer directly above the first in Cartesian space.
 
     Parameters
@@ -393,7 +393,7 @@ def build_second_layer(positions_cartesian):
     """
     
     thickness = np.max(positions_cartesian[:, 2]) - np.min(positions_cartesian[:, 2])
-    shift = thickness + 3.
+    shift = thickness + 5.
     
     second_positions_cartesion = positions_cartesian.copy()
     second_positions_cartesion[:, 2] += shift
