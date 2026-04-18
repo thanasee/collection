@@ -207,7 +207,7 @@ def check_elements(elements):
         while True:
             sort_elements = input("Enter the desired element order (separate by space): ").split()
             if len(sort_elements) == 0:
-                print("Warning! Empty input — using default unique element order.")
+                print("Warning! Empty input — using default unique element order.\n")
                 return unique_elements.copy()
             if (len(sort_elements) == len(unique_elements) and
                     set(sort_elements) == set(unique_elements)):
@@ -523,24 +523,25 @@ def get_shift_grid(lattice_type):
 
     Returns
     -------
-    shifts : list[tuple[float, float]] — (shift_a, shift_b) in fractional coordinates
+    list of (float, float, str) — (shift_a, shift_b, label)
     """
 
-    if lattice_type == 'square':
-        return [(0.,     0.),
-                (1./2.,  0.),
-                (1./2.,  1./2.)]
+    if lattice_type == "hexagonal":
+        return [(0.0,       0.0,       "AA"),
+                (1.0 / 3.0, 2.0 / 3.0, "AB"),
+                (2.0 / 3.0, 1.0 / 3.0, "AB_prime")]
 
-    elif lattice_type in ('rectangular', 'oblique'):
-        return [(0.,     0.),
-                (1./2.,  0.),
-                (0.,     1./2.),
-                (1./2.,  1./2.)]
+    elif lattice_type == "square":
+        return [(0.0, 0.0, "AA"),
+                (0.5, 0.0, "AB"),
+                (0.5, 0.5, "AA_prime")]
 
-    elif lattice_type == 'hexagonal':
-        return [(0.,     0.),
-                (1./3.,  2./3.),
-                (2./3.,  1./3.)]
+    else:
+        # rectangular or oblique
+        return [(0.0, 0.0, "AA"),
+                (0.5, 0.0, "AB_x"),
+                (0.0, 0.5, "AB_y"),
+                (0.5, 0.5, "AB_xy")]
 
 
 def shift_sheet(positions_direct, shift_a, shift_b):
@@ -609,6 +610,28 @@ def build_bilayer(atom_counts, first_positions_direct, second_positions_direct, 
             "flags": new_flags if selective_dynamics else None}
 
 
+def write_list(filepath, shifts, working_dir):
+    """Write a summary file listing all generated stacking configurations.
+
+    Records the directory path, stacking label, and fractional shift
+    coordinates (shift_a, shift_b) for each generated bilayer configuration.
+    This file serves as a reference for identifying and submitting stacking
+    calculations.
+
+    Parameters
+    ----------
+    filepath    : str                          — path to the output summary file
+    shifts      : list[tuple[float, float, str]] — (shift_a, shift_b, label) entries
+    working_dir : str                          — base directory where stack
+                                                 subdirectories were created
+    """
+
+    with open(filepath, 'w') as o:
+        for i, (shift_a, shift_b, stack_label) in enumerate(shifts, start=1):
+            output_dir = os.path.join(working_dir, f"{i}_{stack_label}")
+            o.write(f"{output_dir:<40}\n")
+
+
 def main():
     """Parse argument, build second layer, stack both layers, and write output files"""
     
@@ -636,7 +659,7 @@ def main():
     print(f"Detected 2D lattice type: {lattice_type}")
     shifts = get_shift_grid(lattice_type)
     
-    for shift_a, shift_b in shifts:
+    for i, (shift_a, shift_b, stack_label) in enumerate(shifts, start=1):
             shift_positions_direct = shift_sheet(second_positions_direct, shift_a, shift_b)
             bilayer = build_bilayer(monolayer["atom_counts"], monolayer["positions_direct"], shift_positions_direct,
                                     monolayer["species"], monolayer["selective_dynamics"], monolayer["flags"])
@@ -644,12 +667,15 @@ def main():
             mapping = mapping_elements(bilayer_elements, bilayer["atom_counts"], bilayer_positions_cartesion, bilayer["positions_direct"],
                                        bilayer["species"], monolayer["selective_dynamics"], bilayer["flags"], sort_elements)
             labels = define_labels(mapping["elements"], mapping["atom_counts"])
-            output_dir = os.path.join(working_dir, f"stack_a{shift_a:.3f}_b{shift_b:.3f}")
+            output_dir = os.path.join(working_dir, f"{i}_{stack_label}")
             os.makedirs(output_dir, exist_ok=True)
             output_path = os.path.join(output_dir, "POSCAR")
             write_POSCAR(output_path, monolayer["lattice_matrix"], mapping["elements"], mapping["atom_counts"],
                          mapping["positions_direct"], monolayer["selective_dynamics"], mapping["flags"], labels)
-    print(f"Written {len(shifts)} POSCARs Finished!\n")
+    print(f"Written {len(shifts)} POSCARs Finished!")
+    stack_list = os.path.join(working_dir, "stack_list.dat")
+    write_list(stack_list, shifts, working_dir)
+    print(f"Stack list written to: {stack_list}\n")
 
 
 if __name__ == "__main__":
