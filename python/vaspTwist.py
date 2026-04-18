@@ -30,7 +30,6 @@ MAX_ATOMS  = 200    # Maximum number of atoms in the bilayer supercell
 THETA_STEP = 0.1    # Twist angle search step (degrees)
 MAX_STRAIN = 0.05   # Maximum symmetric relative distance for vector coincidence
 N_MIN      = 1      # Minimum supercell index
-N_MAX      = 10     # Maximum supercell index
 
 def read_POSCAR(filepath):
     """Read a VASP POSCAR file and return its contents as a dictionary.
@@ -385,10 +384,6 @@ def write_POSCAR(filepath, lattice_matrix, elements, atom_counts,
                         f"   {label:>6s}\n")
 
 
-# ---------------------------------------------------------------------------
-# Geometry helpers
-# ---------------------------------------------------------------------------
-
 def unwrap(positions_direct):
     """Reconstruct a contiguous cluster by unwrapping periodic boundary conditions.
 
@@ -438,10 +433,6 @@ def center_sheet(positions_direct):
 
     return new % 1.0
 
-
-# ---------------------------------------------------------------------------
-# Moiré supercell search (Numba-accelerated)
-# ---------------------------------------------------------------------------
 
 @njit
 def rotation_matrix(degree):
@@ -556,10 +547,6 @@ def find_moire_vectors(bottom_lattice_matrix, top_lattice_matrix,
 
     return moire_vectors
 
-
-# ---------------------------------------------------------------------------
-# Supercell construction
-# ---------------------------------------------------------------------------
 
 def build_supercell(lattice_matrix, positions_cartesian, species,
                      selective_dynamics, flags, A1, A2):
@@ -684,10 +671,6 @@ def collect_elements_and_counts(species, known_elements):
     return elements_order, atom_counts
 
 
-# ---------------------------------------------------------------------------
-# Strain and geometry validation
-# ---------------------------------------------------------------------------
-
 def metric_tensor(e1, e2, e3):
     """Compute the 3×3 metric tensor G where G[i,j] = ei · ej.
 
@@ -774,10 +757,6 @@ def calculate_area_ratio(A1, A2, a1, a2):
 
     return supercell_area / primitive_area
 
-
-# ---------------------------------------------------------------------------
-# Candidate builder (one theta per worker process)
-# ---------------------------------------------------------------------------
 
 def build_candidates_for_theta(theta_key, vec_list,
                                 bottom_lattice_matrix,
@@ -911,10 +890,6 @@ def build_candidates_for_theta(theta_key, vec_list,
     return theta_candidates
 
 
-# ---------------------------------------------------------------------------
-# Candidate selection prompt
-# ---------------------------------------------------------------------------
-
 def prompt_selection(candidates):
     """Display a numbered table of candidates and prompt the user to select which to generate.
 
@@ -970,43 +945,46 @@ def prompt_selection(candidates):
             print("ERROR! Enter integers separated by spaces, 'all', or 'none'.")
 
 
-# ---------------------------------------------------------------------------
-# Lattice type detection and stacking shift generation
-# ---------------------------------------------------------------------------
+def detect_lattice_type(lattice_matrix, angle_tol=2.0, length_tol=0.05):
+    """Detect the 2D lattice type from the in-plane lattice vectors.
 
-def detect_lattice_type(lattice_matrix):
-    """Classify the 2D Bravais lattice type from the in-plane lattice vectors.
-
-    Compares the in-plane lattice lengths (a, b) and the angle γ between them
-    to identify the crystal system according to the standard 2D classification:
-
-        square      : γ = 90°  and  a = b
-        rectangular : γ = 90°  and  a ≠ b
-        hexagonal   : γ = 60° or 120°  and  a = b
-        oblique     : all other cases
+    Classifies based on the ratio of vector lengths and the angle between them:
+        hexagonal   : |A1| ≈ |A2|  and  angle ≈ 60° or 120°
+        square      : |A1| ≈ |A2|  and  angle ≈ 90°
+        rectangular : |A1| ≠ |A2|  and  angle ≈ 90°
+        oblique     : everything else
 
     Parameters
     ----------
-    lattice_matrix : np.ndarray, shape (3, 3) — row vectors of the lattice in Å
+    lattice_matrix : np.ndarray (3, 3) — supercell lattice (in-plane rows 0 and 1)
+    angle_tol      : float — tolerance in degrees for angle classification
+    length_tol     : float — relative tolerance for length equality
 
     Returns
     -------
-    str : one of 'square', 'rectangular', 'hexagonal', 'oblique'
+    str — one of 'hexagonal', 'square', 'rectangular', 'oblique'
     """
 
-    length_a = np.linalg.norm(lattice_matrix[0])
-    length_b = np.linalg.norm(lattice_matrix[1])
-    gamma = np.degrees(np.arccos(np.clip(
-        np.dot(lattice_matrix[0], lattice_matrix[1]) /
-        (length_a * length_b), -1., 1.)))
+    A1 = lattice_matrix[0]
+    A2 = lattice_matrix[1]
 
-    if np.abs(gamma - 90.) < 1e-5:
-        return 'square' if np.abs(length_a - length_b) < 1e-8 else 'rectangular'
-    elif ((np.abs(gamma - 60.) < 1e-5 or np.abs(gamma - 120.) < 1e-5)
-          and np.abs(length_a - length_b) < 1e-8):
-        return 'hexagonal'
+    norm_A1 = np.linalg.norm(A1)
+    norm_A2 = np.linalg.norm(A2)
+
+    cos_angle = np.dot(A1, A2) / (norm_A1 * norm_A2)
+    cos_angle = np.clip(cos_angle, -1.0, 1.0)
+    angle = np.degrees(np.arccos(cos_angle))
+
+    lengths_equal = abs(norm_A1 - norm_A2) / max(norm_A1, norm_A2) < length_tol
+
+    if lengths_equal and (abs(angle - 60.0) < angle_tol or abs(angle - 120.0) < angle_tol):
+        return "hexagonal"
+    elif lengths_equal and abs(angle - 90.0) < angle_tol:
+        return "square"
+    elif abs(angle - 90.0) < angle_tol:
+        return "rectangular"
     else:
-        return 'oblique'
+        return "oblique"
 
 
 def get_stacking_shifts(lattice_type):
@@ -1042,11 +1020,8 @@ def get_stacking_shifts(lattice_type):
                 (0.5, 0.5, "AB_xy")]
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
 def main():
+    """Parse arguments, search moire vector, build bilayer, and write outputs"""
 
     if '-h' in argv or '--help' in argv or len(argv) not in (2, 3):
         usage()
@@ -1066,12 +1041,20 @@ def main():
     known_elements = sort_elements if sort_elements is not None else bilayer_elements
     selective_dynamics = bottom["selective_dynamics"] or top["selective_dynamics"]
 
+    # Derive N_MAX from primitive cell sizes and the hardcoded MAX_ATOMS limit.
+    # With indices up to N_MAX, the largest supercell has N_MAX² × primitive_atoms atoms.
+    # So: N_MAX = floor(sqrt(MAX_ATOMS / (bottom_atoms + top_atoms))), minimum 1.
+    primitive_atoms = bottom["total_atoms"] + top["total_atoms"]
+    n_max = max(1, int(np.ceil(np.sqrt(MAX_ATOMS / primitive_atoms))))
+    print(f"Auto-detected N_MAX = {n_max}"
+          f"  (MAX_ATOMS={MAX_ATOMS} / {primitive_atoms} primitive atoms, sqrt → {n_max})")
+
     print(f"Searching for commensurate moiré vectors (0 to 180 deg, step = {THETA_STEP} deg)...")
     moire_vectors = find_moire_vectors(bottom["lattice_matrix"],
                                         top["lattice_matrix"],
                                         0.0, 180.0,
                                         THETA_STEP,
-                                        N_MIN, N_MAX)
+                                        N_MIN, n_max)
 
     if len(moire_vectors) == 0:
         print("No commensurate moiré vectors found with the given parameters.")
