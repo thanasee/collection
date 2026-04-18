@@ -611,7 +611,7 @@ def build_supercell(lattice_matrix, positions_cartesian, species,
 
 
 def build_twisted_bilayer(layer1, layer2_rotated, selective_dynamics):
-    """Stack two supercell layers into a twisted bilayer with a 3 Å interlayer gap.
+    """Stack two supercell layers into a twisted bilayer with a 5 Å interlayer gap.
 
     Parameters
     ----------
@@ -631,7 +631,7 @@ def build_twisted_bilayer(layer1, layer2_rotated, selective_dynamics):
 
     z_max_layer1 = np.max(layer1_cartesian[:, 2])
     z_min_layer2 = np.min(layer2_cartesian[:, 2])
-    interlayer_gap = 3.0
+    interlayer_gap = 5.
     layer2_cartesian[:, 2] += z_max_layer1 - z_min_layer2 + interlayer_gap
 
     combined_cartesian = np.vstack((layer1_cartesian, layer2_cartesian))
